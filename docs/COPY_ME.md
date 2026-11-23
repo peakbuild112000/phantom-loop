@@ -20,7 +20,7 @@ extends Node3D
 const LOOP_SECONDS := 30.0
 const TICK := 1.0 / 60.0
 const SPEED := 6.0
-const MAX_GHOSTS := 4
+const MAX_GHOSTS := 3
 
 var _time_left := LOOP_SECONDS
 var _acc := 0.0
@@ -122,12 +122,17 @@ func _step(dt: float) -> void:
 
 	var all := true
 	for plate in _plates:
-		var active := false
-		for body in plate.get_overlapping_bodies():
-			if body == _player:
-				active = true
-			elif body is CharacterBody3D and body.has_meta("action") and body.get_meta("action"):
-				active = true
+		# Deterministic position check instead of Area3D overlaps: no physics-frame
+		# lag, works identically on desktop and Web.
+		var active := _touches_plate(_player.global_position, plate)
+		if not active:
+			for i in _ghosts.size():
+				var g := _ghosts[i]
+				if not (g.has_meta("action") and g.get_meta("action")):
+					continue
+				if _touches_plate(g.global_position, plate):
+					active = true
+					break
 		plate.set_meta("active", active)
 		if not active:
 			all = false
@@ -150,9 +155,15 @@ func _finish_loop() -> void:
 func _on_skip_pressed() -> void:
 	_finish_loop()
 
+func _touches_plate(pos: Vector3, plate: Area3D) -> bool:
+	var p := plate.global_position
+	if absf(pos.y - p.y) > 1.5:
+		return false
+	return Vector2(pos.x - p.x, pos.z - p.z).length() < 1.1
+
 func _on_plate(pos: Vector3) -> bool:
 	for plate in _plates:
-		if pos.distance_to(plate.global_position) < 1.2:
+		if _touches_plate(pos, plate):
 			return true
 	return false
 
@@ -163,6 +174,7 @@ func _reset_room() -> void:
 	_door_latched = false
 	_pitch = 0.0
 	_cam.rotation.x = 0.0
+	_player.rotation.y = 0.0  # always face the room, never the back wall
 	_player.global_position = Vector3(0.0, 1.0, 7.0)
 	_player.velocity = Vector3.ZERO
 	_open_door(false)
@@ -211,7 +223,10 @@ func _update_hud() -> void:
 	if _won:
 		_label.text = "ESCAPED in %d shells - press R to replay" % _loops
 	else:
-		_label.text = "PHANTOM PROTOCOL  |  %04.1fs  |  shell %d/%d  |  parked shells %d/%d  |  plates %d/%d\nYou are the pilot. Drive a shell onto a plate, press E to dock, then pilot the next one.\nEnter or the button = transfer now - Esc releases the mouse to click." % [_time_left, _loops, MAX_GHOSTS + 1, _ghosts.size(), MAX_GHOSTS, active, _plates.size()]
+		var msg := "PHANTOM PROTOCOL  |  %04.1fs  |  shell %d/%d  |  parked shells %d/%d  |  plates %d/%d\nYou are the pilot. Drive a shell onto a plate, press E to dock, then pilot the next one.\nEnter or the button = transfer now - Web: drag mouse to look." % [_time_left, mini(_loops, MAX_GHOSTS + 1), MAX_GHOSTS + 1, _ghosts.size(), MAX_GHOSTS, active, _plates.size()]
+		if _recordings.size() >= MAX_GHOSTS:
+			msg += "\nNO SHELLS LEFT - press R to restart"
+		_label.text = msg
 
 func _build_room() -> void:
 	var dark := Color(0.07, 0.08, 0.13)
@@ -275,7 +290,8 @@ func _make_plate(pos: Vector3) -> Area3D:
 	var col := CollisionShape3D.new()
 	var shape := CylinderShape3D.new()
 	shape.radius = 0.9
-	shape.height = 0.5
+	# Tall trigger: ghosts are spheres centred at torso height (~1 m).
+	shape.height = 2.0
 	col.shape = shape
 	area.add_child(col)
 	add_child(area)
@@ -330,6 +346,12 @@ only way to be in several places at once.
   keeps holding the plate forever instead of walking away.
 - You light a plate just by standing on it. You need 2 parked shells + yourself
   for the 3 plates. Once all plates are lit, the door stays open for the loop.
+  Plates are checked by direct XZ distance, so a ghost holding a plate always
+  counts - no physics-frame lag or missed trigger volume.
+- **Shell limit:** at most 3 ghosts can be parked (`MAX_GHOSTS`). Further
+  transfers still reset the timer but do not create a new ghost, and the HUD
+  shows `NO SHELLS LEFT - press R to restart`.
+- Every new shell spawns facing the room, never the back wall.
 - On Web, hold the **left mouse button and drag** to look around (no pointer
   lock, so the skip button stays clickable). On desktop the mouse is captured;
   `Esc` releases it.

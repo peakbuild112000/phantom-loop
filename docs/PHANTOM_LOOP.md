@@ -22,7 +22,8 @@ bodies instead of waiting for a timer.
    button to transfer early. Timer expiry forces a transfer too.
 3. The abandoned shell becomes a ghost that replays its route and freezes at
    the end, keeping its plate held.
-4. Stack parked shells until every condition is true at the same time.
+4. Stack up to **3** parked shells (`MAX_GHOSTS`) until every condition is true.
+   Beyond that, transfers still reset the timer but create no new ghost.
 5. Walk the current shell through the door and move to the next room.
 
 ## Simulation rules
@@ -31,12 +32,17 @@ bodies instead of waiting for a timer.
 * Snapshot = `{ position: Vector3, action: bool }` per tick.
 * Replay by snapshot instead of input: deterministic on WebGL, with no reliance
   on physics for playback.
-* Ghosts are kinematic `CharacterBody3D` nodes: they trigger logical `Area3D`
-  nodes but do not push the player. When their cursor reaches the end of the
-  recording it clamps to the last frame, so they stay parked on their plate.
+* Ghosts are kinematic `CharacterBody3D` nodes on layer 2 with mask 0: plates
+  detect them, but they never push the player. When their cursor reaches the end
+  of the recording it clamps to the last frame, so they stay parked on their plate.
+* Plate activation uses a direct XZ distance check (`_touches_plate`) instead of
+  `Area3D.get_overlapping_bodies()`. The tall trigger shape was also increased to
+  2 m. Overlaps were one physics frame late / too flat, so held plates sometimes
+  never lit up. The check is now identical on desktop and Web.
 * Docking (`E` on a plate), `Enter`, the skip button and timer expiry all call
   the same `finish_loop()` transfer path.
-* Room reset: original positions, timer, plate state, door collision.
+* Room reset: original positions, timer, plate state, door collision, and player
+  yaw forced to 0 so the new shell always faces the room instead of a wall.
 * Once all plates are active, the door is **latched open** until the next loop.
   Without this, the player had to leave the last plate to reach the door, which
   closed it again and made the third loop look empty.

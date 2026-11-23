@@ -46,8 +46,11 @@ at the same time to open the door.
 * A parked shell replays its last route and then **freezes**, so it keeps
   holding the plate forever instead of walking away.
 * Once all plates are lit, the door stays open for the rest of the loop.
-* The first puzzle needs two parked shells plus yourself. Future rooms will add
-  different robot classes with their own abilities - see
+* Only **3 shells can be parked** at once. When the limit is reached the HUD
+  shows `NO SHELLS LEFT - press R to restart`. The first puzzle needs two parked
+  shells plus yourself.
+* Every new shell spawns facing the room, never a wall.
+* Future rooms will add different robot classes with their own abilities - see
   [docs/PHANTOM_LOOP.md](docs/PHANTOM_LOOP.md).
 
 ## Controls
