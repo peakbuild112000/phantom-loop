@@ -5,6 +5,9 @@ extends Node3D
 
 const TICK := 1.0 / 60.0
 const SPEED := 6.0
+const GRAVITY := 18.0
+const JUMP_SPEED := 8.0
+const FOOTSTEP_DISTANCE := 1.7
 const MAX_GHOSTS := 3
 const NEED_ANY := -1
 const NEED_KEY := -2
@@ -21,6 +24,7 @@ var _ghosts: Array[Node3D] = []
 var _ghost_classes: Array[int] = []
 var _cursors: Array[int] = []
 var _plates: Array[Dictionary] = []
+var _movers: Array[Dictionary] = []
 var _level_nodes: Array[Node] = []
 var _door: StaticBody3D
 var _door_col: CollisionShape3D
@@ -47,17 +51,32 @@ var _door_target_y := 1.5
 var _flash: ColorRect
 var _flash_alpha := 0.0
 var _mouse_released_by_user := false
+var _jump_queued := false
+var _was_on_floor := true
+var _foot_acc := 0.0
+var _foot_flip := false
+var _audio: Dictionary = {}
+var _hud: CanvasLayer
+var _menu: CanvasLayer
+var _menu_title: Label
+var _in_menu := true
 
 func _ready() -> void:
 	_levels = LevelData.all()
 	_build_player()
+	_build_audio()
 	_build_hud()
+	_build_menu()
 	_load_level(0)
-	_apply_mouse_mode()
+	_set_menu(true)
 
 func _apply_mouse_mode() -> void:
 	# Called on boot AND after every level load / transfer: the mouse must never
 	# silently stay unlocked when a new sector starts.
+	if _in_menu:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_dragging = false
+		return
 	if OS.has_feature("web"):
 		# Web has no pointer lock - drag look keeps HUD buttons clickable.
 		# Keep dragging if the button is still held during the transition.
@@ -70,11 +89,32 @@ func _apply_mouse_mode() -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		_dragging = false
 
+func _set_menu(show: bool) -> void:
+	_in_menu = show
+	_menu.visible = show
+	_hud.visible = not show
+	_jump_queued = false
+	_dragging = false
+	_apply_mouse_mode()
+
+func _start_game() -> void:
+	if not _in_menu:
+		return
+	_set_menu(false)
+	_play("ui")
+
+func _restart_level() -> void:
+	# R repeats the sector you are in, not the whole run.
+	var idx := _level_idx
+	_load_level(idx)
+	_set_menu(false)
+	_play("ui")
+
 func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("restart"):
-		get_tree().reload_current_scene()
+		_restart_level()
 		return
-	if _won or _game_over or _transition > 0.0:
+	if _in_menu or _won or _game_over or _transition > 0.0:
 		return
 	_acc += delta
 	var steps := 0
@@ -134,7 +174,12 @@ func _process(delta: float) -> void:
 		_cam.fov = 75.0
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed:
+	if _in_menu:
+		if event is InputEventKey and event.pressed and not event.echo:
+			if event.keycode == KEY_ENTER or event.keycode == KEY_SPACE:
+				_start_game()
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
 			KEY_1: _select_class(0)
 			KEY_2: _select_class(1)
@@ -146,6 +191,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_E:
 				if not _won and not _game_over:
 					_finish_loop()
+			KEY_SPACE:
+				_jump_queued = true
 			KEY_ESCAPE:
 				_mouse_released_by_user = true
 				_apply_mouse_mode()
@@ -172,7 +219,34 @@ func _step(dt: float) -> void:
 	var dir := (_player.global_transform.basis * local).normalized()
 	_player.velocity.x = dir.x * SPEED
 	_player.velocity.z = dir.z * SPEED
+	# Gravity + one-shot jump, consumed on the exact fixed step we land on.
+	if _player.is_on_floor():
+		if _jump_queued:
+			_player.velocity.y = JUMP_SPEED
+			_play("jump")
+		else:
+			_player.velocity.y = 0.0
+		_jump_queued = false
+	else:
+		_player.velocity.y -= GRAVITY * dt
+	var before := _player.global_position
 	_player.move_and_slide()
+	var grounded := _player.is_on_floor()
+	if grounded and not _was_on_floor:
+		_play("land")
+	_was_on_floor = grounded
+	# Footsteps are distance-based, so they stay in sync on Web and desktop.
+	var walked := Vector2(_player.global_position.x - before.x, _player.global_position.z - before.z).length()
+	if grounded and walked > 0.001:
+		_foot_acc += walked
+		if _foot_acc >= FOOTSTEP_DISTANCE:
+			_foot_acc -= FOOTSTEP_DISTANCE
+			_play("step_a" if not _foot_flip else "step_b")
+			_foot_flip = not _foot_flip
+	elif not grounded:
+		_foot_acc = 0.0
+	for m in _movers:
+		(m["body"] as Node3D).global_position = m["base"] + _mover_offset(m, _elapsed)
 	_frames.append({"pos": _player.global_position, "cls": _current_class})
 
 	for i in _ghosts.size():
@@ -202,15 +276,18 @@ func _check_plates() -> void:
 		var pos: Vector3 = plate["pos"]
 		var active := false
 		if need == NEED_KEY:
-			active = _key != null and _flat_dist(_key.global_position, pos) < radius
+			active = _key != null and _near(_key.global_position, pos, radius)
 		else:
-			if _class_matches(need, _current_class) and _flat_dist(_player.global_position, pos) < radius:
+			if _class_matches(need, _current_class) and _near(_player.global_position, pos, radius):
 				active = true
 			if not active:
 				for i in _ghosts.size():
-					if _class_matches(need, _ghost_classes[i]) and _flat_dist(_ghosts[i].global_position, pos) < radius:
+					if _class_matches(need, _ghost_classes[i]) and _near(_ghosts[i].global_position, pos, radius):
 						active = true
 						break
+		if active and not bool(plate.get("was_active", false)):
+			_play("plate")
+		plate["was_active"] = active
 		plate["active"] = active
 		var mat: StandardMaterial3D = plate["mat"]
 		mat.albedo_color = Color(0.35, 1.0, 0.85) if active else plate["off_color"]
@@ -219,6 +296,7 @@ func _check_plates() -> void:
 			all = false
 	if all and not _door_latched:
 		_door_latched = true
+		_play("door")
 	_open_door(_door_latched)
 
 func _class_matches(need: int, cls: int) -> bool:
@@ -226,6 +304,19 @@ func _class_matches(need: int, cls: int) -> bool:
 
 func _flat_dist(a: Vector3, b: Vector3) -> float:
 	return Vector2(a.x - b.x, a.z - b.z).length()
+
+func _near(a: Vector3, b: Vector3, radius: float) -> bool:
+	# Height matters for the new elevated pads: standing under one must not count.
+	return absf(a.y - b.y) < 1.4 and _flat_dist(a, b) < radius
+
+func _mover_offset(m: Dictionary, t: float) -> Vector3:
+	var off := Vector3.ZERO
+	var v := sin(t * float(m["speed"]) + float(m["phase"])) * float(m["amp"])
+	match String(m["axis"]):
+		"x": off.x = v
+		"y": off.y = v
+		"z": off.z = v
+	return off
 
 func _move_key(dt: float) -> void:
 	if _key == null:
@@ -257,12 +348,14 @@ func _finish_loop() -> void:
 	# No shells left: this transfer is a loss, not another free reset.
 	if _recordings.size() >= MAX_GHOSTS:
 		_game_over = true
+		_play("lose")
 		_flash.color = Color(0.75, 0.06, 0.12, 0.3)
 		_flash_alpha = 0.3
 		_update_hud()
 		return
 	if _frames.size() > 2:
 		_recordings.append(_frames.duplicate(true))
+	_play("transfer")
 	var c: Color = RobotShell.CLASS_COLORS[_current_class]
 	_flash.color = Color(c.r, c.g, c.b, 0.32)
 	_flash_alpha = 0.32
@@ -276,6 +369,11 @@ func _reset_room() -> void:
 	_frames.clear()
 	_door_latched = false
 	_pitch = 0.0
+	_jump_queued = false
+	_was_on_floor = true
+	_foot_acc = 0.0
+	for m in _movers:
+		(m["body"] as Node3D).global_position = m["base"] + _mover_offset(m, 0.0)
 	_apply_mouse_mode()
 	_cam.rotation.x = 0.0
 	_player.rotation.y = float(level.get("yaw", 0.0))
@@ -302,6 +400,7 @@ func _reset_room() -> void:
 		_cursors.append(0)
 	for plate in _plates:
 		plate["active"] = false
+		plate["was_active"] = false
 		var mat: StandardMaterial3D = plate["mat"]
 		mat.albedo_color = plate["off_color"]
 		mat.emission_energy_multiplier = 0.25
@@ -327,10 +426,12 @@ func _select_class(cls: int) -> void:
 	_player.collision_mask = 1 if cls == 3 else 5
 	for i in _class_buttons.size():
 		_class_buttons[i].modulate = Color(1, 1, 1, 1) if i == cls else Color(0.45, 0.45, 0.45, 1)
+	_play("ui")
 	_update_hud()
 
 func _win() -> void:
 	_won = true
+	_play("win")
 	_door_col.disabled = false
 	_door_target_y = 1.5
 	_flash.color = Color(0.6, 1.0, 0.8, 0.55)
@@ -344,7 +445,9 @@ func _advance_level() -> void:
 	if _level_idx + 1 < _levels.size():
 		_load_level(_level_idx + 1)
 	else:
-		get_tree().reload_current_scene()
+		# All sectors cleared: offer the menu again instead of a silent reload.
+		_menu_title.text = "RUN COMPLETE"
+		_set_menu(true)
 
 func _load_level(idx: int) -> void:
 	_level_idx = idx
@@ -352,6 +455,7 @@ func _load_level(idx: int) -> void:
 		n.queue_free()
 	_level_nodes.clear()
 	_plates.clear()
+	_movers.clear()
 	_recordings.clear()
 	_loops = 1
 	_won = false
@@ -361,7 +465,22 @@ func _load_level(idx: int) -> void:
 	var level: Dictionary = _levels[idx]
 	_build_room()
 	for w in level.get("walls", []):
-		_box(w["pos"], w["size"], Color(0.18, 0.20, 0.32), 3 if w.get("phase", false) else 1)
+		var wall_color := Color(0.18, 0.20, 0.32)
+		if w.has("color"):
+			wall_color = Color.html(String(w["color"]))
+		if w.get("phase", false):
+			wall_color = Color(0.55, 0.30, 0.90)
+		_box(w["pos"], w["size"], wall_color, 3 if w.get("phase", false) else 1)
+	for m in level.get("movers", []):
+		var body := _box(m["pos"], m["size"], Color(0.90, 0.22, 0.26), 1)
+		_movers.append({
+			"body": body,
+			"base": m["pos"],
+			"axis": m.get("axis", "y"),
+			"amp": m.get("amp", 1.0),
+			"speed": m.get("speed", 1.0),
+			"phase": m.get("phase", 0.0),
+		})
 	_build_door()
 	for p in level["plates"]:
 		_make_plate(p)
@@ -388,7 +507,7 @@ func _update_hud() -> void:
 	var msg := "%s  |  T+%04.1fs  |  shell %d  |  copies left %d/%d  |  plates %d/%d\n" % [level["name"], _elapsed, mini(_loops, MAX_GHOSTS + 1), left, MAX_GHOSTS, active, _plates.size()]
 	msg += "CLASS: %s  |  %s\n" % [RobotShell.CLASS_NAMES[_current_class], level["hint"]]
 	if _game_over:
-		msg = "GAME OVER - OUT OF COPIES\nPress R to restart the run"
+		msg = "GAME OVER - OUT OF COPIES\nPress R to repeat this sector"
 	elif _won:
 		msg = "SECTOR CLEAR - %s in %d shells\nOpening next sector..." % [level["name"], _loops]
 	elif left == 0:
@@ -556,6 +675,7 @@ func _build_player() -> void:
 
 func _build_hud() -> void:
 	var canvas := CanvasLayer.new()
+	_hud = canvas
 	_label = Label.new()
 	_label.position = Vector2(24.0, 18.0)
 	_label.add_theme_font_size_override("font_size", 17)
@@ -581,3 +701,140 @@ func _build_hud() -> void:
 	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	canvas.add_child(_flash)
 	add_child(canvas)
+
+func _build_menu() -> void:
+	_menu = CanvasLayer.new()
+	_menu.layer = 10
+	var bg := TextureRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.stretch_mode = TextureRect.STRETCH_SCALE
+	var grad := Gradient.new()
+	grad.colors = PackedColorArray([
+		Color(0.02, 0.03, 0.08, 0.94),
+		Color(0.10, 0.04, 0.20, 0.86),
+		Color(0.02, 0.02, 0.05, 0.96),
+	])
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.fill_from = Vector2(0.0, 0.0)
+	tex.fill_to = Vector2(1.0, 1.0)
+	tex.width = 256
+	tex.height = 256
+	bg.texture = tex
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_menu.add_child(bg)
+	var edge := ColorRect.new()
+	edge.set_anchors_preset(Control.PRESET_CENTER)
+	edge.position = Vector2(-362.0, -232.0)
+	edge.size = Vector2(724.0, 464.0)
+	edge.color = Color(0.25, 1.0, 0.90, 0.35)
+	_menu.add_child(edge)
+	var frame := ColorRect.new()
+	frame.set_anchors_preset(Control.PRESET_CENTER)
+	frame.position = Vector2(-360.0, -230.0)
+	frame.size = Vector2(720.0, 460.0)
+	frame.color = Color(0.03, 0.05, 0.11, 0.72)
+	_menu.add_child(frame)
+	_menu_title = Label.new()
+	_menu_title.text = "PHANTOM LOOP"
+	_menu_title.set_anchors_preset(Control.PRESET_CENTER)
+	_menu_title.position = Vector2(-320.0, -196.0)
+	_menu_title.size = Vector2(640.0, 90.0)
+	_menu_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_menu_title.add_theme_font_size_override("font_size", 58)
+	_menu_title.add_theme_color_override("font_color", Color(0.45, 1.0, 0.92))
+	_menu.add_child(_menu_title)
+	var sub := Label.new()
+	sub.text = "TIME-LOOP ESCAPE  //  PILOT THE SHELLS"
+	sub.set_anchors_preset(Control.PRESET_CENTER)
+	sub.position = Vector2(-320.0, -112.0)
+	sub.size = Vector2(640.0, 40.0)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.add_theme_font_size_override("font_size", 19)
+	sub.add_theme_color_override("font_color", Color(0.72, 0.82, 1.0))
+	_menu.add_child(sub)
+	var info := Label.new()
+	info.text = "WASD move   SPACE jump   Mouse look (drag on Web)\n1-4 choose class   E / Enter transfer   R repeat sector\nPark shells on plates, then cross the door."
+	info.set_anchors_preset(Control.PRESET_CENTER)
+	info.position = Vector2(-320.0, -48.0)
+	info.size = Vector2(640.0, 110.0)
+	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	info.add_theme_font_size_override("font_size", 16)
+	info.add_theme_color_override("font_color", Color(0.82, 0.88, 1.0))
+	_menu.add_child(info)
+	var start := Button.new()
+	start.text = "START SHIFT  [Enter]"
+	start.set_anchors_preset(Control.PRESET_CENTER)
+	start.position = Vector2(-160.0, 92.0)
+	start.size = Vector2(320.0, 54.0)
+	start.pressed.connect(_start_game)
+	_menu.add_child(start)
+	var footer := Label.new()
+	footer.text = "3 COPIES PER SECTOR  //  NO TIMER  //  0 COPIES = GAME OVER"
+	footer.set_anchors_preset(Control.PRESET_CENTER)
+	footer.position = Vector2(-340.0, 182.0)
+	footer.size = Vector2(680.0, 34.0)
+	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	footer.add_theme_font_size_override("font_size", 14)
+	footer.add_theme_color_override("font_color", Color(1.0, 0.72, 0.40))
+	_menu.add_child(footer)
+	add_child(_menu)
+
+func _build_audio() -> void:
+	_audio["step_a"] = _make_player(_synth(110.0, 0.09, 0.85, 30.0, -0.3), -9.0)
+	_audio["step_b"] = _make_player(_synth(85.0, 0.10, 0.82, 28.0, -0.4), -9.0)
+	_audio["jump"] = _make_player(_synth(260.0, 0.16, 0.12, 9.0, 1.1), -7.0)
+	_audio["land"] = _make_player(_synth(130.0, 0.14, 0.50, 18.0, -0.5), -8.0)
+	_audio["plate"] = _make_player(_synth(720.0, 0.18, 0.05, 8.0, 0.2), -6.0)
+	_audio["door"] = _make_player(_synth(150.0, 0.45, 0.25, 3.5, -0.6), -6.0)
+	_audio["transfer"] = _make_player(_synth(320.0, 0.30, 0.20, 6.0, 1.8), -7.0)
+	_audio["win"] = _make_player(_synth(440.0, 0.55, 0.04, 2.5, 1.6), -5.0)
+	_audio["lose"] = _make_player(_synth(220.0, 0.60, 0.25, 2.5, -0.8), -5.0)
+	_audio["ui"] = _make_player(_synth(900.0, 0.06, 0.03, 30.0, 0.0), -12.0)
+
+func _make_player(stream: AudioStream, db: float) -> AudioStreamPlayer:
+	var player := AudioStreamPlayer.new()
+	player.stream = stream
+	player.volume_db = db
+	add_child(player)
+	return player
+
+func _play(name: String) -> void:
+	var player: AudioStreamPlayer = _audio.get(name)
+	if player != null:
+		player.play()
+
+func _shutdown_audio() -> void:
+	# Used by the headless smoke test before quit() so the audio server has no
+	# live playbacks when the process tears down.
+	for key in _audio.keys():
+		var player: AudioStreamPlayer = _audio[key]
+		player.stop()
+		player.stream = null
+	_audio.clear()
+
+func _synth(freq: float, dur: float, noise: float, decay: float, sweep: float) -> AudioStreamWAV:
+	# Tiny procedural PCM samples: no external audio assets in the export.
+	var rate := 22050
+	var count := int(float(rate) * dur)
+	var data := PackedByteArray()
+	data.resize(count * 2)
+	var phase := 0.0
+	var rng_state := 987654321
+	for i in range(count):
+		var t := float(i) / float(rate)
+		var env: float = exp(-decay * t) * clampf(1.0 - t / dur, 0.0, 1.0)
+		var f := freq * (1.0 + sweep * t)
+		phase += 6.2831853 * f / float(rate)
+		rng_state = (rng_state * 1103515245 + 12345) & 0x7fffffff
+		var rnd := float(rng_state) / 1073741824.0 - 1.0
+		var wave := sin(phase) * (1.0 - noise) + rnd * noise
+		var v := int(clampf(wave * env * 0.7, -1.0, 1.0) * 32000.0)
+		data[i * 2] = v & 0xff
+		data[i * 2 + 1] = (v >> 8) & 0xff
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = rate
+	wav.stereo = false
+	wav.data = data
+	return wav

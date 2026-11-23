@@ -8,7 +8,8 @@
 A time-loop escape room with a robot-shell lore. You are a pilot transferring
 between bodies in a derelict facility. Every abandoned shell replays its last
 route and then freezes, so puzzles ask you to cooperate with your own past
-bodies. Four sectors introduce four robot classes with distinct abilities.
+bodies. Eight sectors introduce four robot classes, jumping, and environmental
+puzzles with precise class/terrain combinations.
 
 * **Target time:** 50 hours (PHANTOM goal: 50 fragments-hours).
 * **Engine:** Godot 4.6.1 stable, GL Compatibility renderer.
@@ -23,7 +24,7 @@ bodies. Four sectors introduce four robot classes with distinct abilities.
 3. The abandoned shell becomes a ghost that replays its route and freezes at
    the end, keeping its plate held.
 4. You have **3 copies** (`MAX_GHOSTS`). A fourth transfer is a **game over**
-   with a red flash and a `GAME OVER` screen; `R` restarts the run.
+   with a red flash and a `GAME OVER` screen; `R` repeats the same sector.
 5. Walk the current shell through the door. It closes behind you and the next
    sector loads automatically after a short flash transition.
 
@@ -36,8 +37,14 @@ bodies. Four sectors introduce four robot classes with distinct abilities.
   on physics for playback. When the cursor reaches the end it clamps to the last
   frame, so the shell parks where it stopped.
 * Ghosts are kinematic `CharacterBody3D` nodes on layer 2 with mask 0: they can
-  never push the player. Plates are evaluated with a direct XZ distance check,
-  so there is no physics-frame lag or missed trigger volume.
+  never push the player. Plates use a direct XZ distance check plus a 1.4 m
+  vertical tolerance, so elevated pads are real puzzles but need no trigger
+  volume. There is no physics-frame lag or missed overlap.
+* Gravity is 18 m/s² and `Space` sets an 8 m/s impulse only on a floor step.
+  Footsteps are emitted every 1.7 m of horizontal travel, which keeps their
+  rhythm identical on desktop and Web.
+* Moving gates are `mover` dictionaries driven by `sin(_elapsed * speed + phase)`.
+  Because `_elapsed` resets every loop, their timing is deterministic for ghosts.
 * Plate rules: `ANY` accepts every class; a class id accepts only that class;
   `KEY` accepts only the gold core when it is close enough.
 * Every transfer path (`E`, `Enter`, button) calls the same `_finish_loop()`,
@@ -62,8 +69,24 @@ bodies. Four sectors introduce four robot classes with distinct abilities.
 | 2 | **Heavy Foundry** | Anchor-only plate behind a wall | 2 |
 | 3 | **Magnet Bay** | Pull the gold core onto a dark pad | 2 + magnet |
 | 4 | **Phase Vault** | Phase wall + Spark remote pad | 2 + phase/spark |
+| 5 | **Step Ladder** | Jump up two blue steps to a pad at y=2.6 | 2 + jump |
+| 6 | **Grated Cell** | Spark through a cage grate; Phase through a full-width wall | 1 + spark + phase |
+| 7 | **Magnet Ridge** | Jump to a high pad, then lead the core through a 2 m slit | 1 + jump + magnet |
+| 8 | **Sweeping Gate** | Jump a 0.8 m bar, then time a rising 2.6 m gate | 2 + jump + timing |
 
-Sector data lives in `scripts/level_data.gd`; adding a sector is one dictionary.
+Sector data lives in `scripts/level_data.gd`; adding a sector is one dictionary
+with `walls`, `movers`, `plates` and an optional `key`.
+
+## Audio and start menu
+
+Sounds are short PCM buffers synthesised at runtime into `AudioStreamWAV`
+(`_synth`), played by ten `AudioStreamPlayer` nodes: two alternating footsteps,
+jump, land, plate, door, transfer, win, lose and UI. No external audio files are
+shipped.
+
+The menu is a `CanvasLayer` with a `GradientTexture2D` background over the live
+3D room, a neon frame, the title, the control legend and a START button. `Enter`
+or `Space` starts; finishing sector 8 returns to it with `RUN COMPLETE`.
 
 ## Robot classes
 
@@ -86,13 +109,13 @@ shell's route) and **Weld** (temporarily bridges a gap).
 scenes/
   main.tscn            # root, phantom_loop.gd
 scripts/
-  phantom_loop.gd      # sectors, loop, ghosts, plates, HUD
-  level_data.gd        # 4 sector dictionaries
+  phantom_loop.gd      # sectors, loop, ghosts, plates, HUD, menu, audio
+  level_data.gd        # 8 sector dictionaries
   robot_shell.gd       # procedural 3D model + class colours
 shaders/
   ghost.gdshader       # translucent spectral material
 tests/
-  smoke_test.gd        # headless checks for plates, ghosts, classes
+  smoke_test.gd        # headless checks for plates, jump, audio, menu
 ```
 
 All robot, plate, door and key models are generated from meshes in code, so the
@@ -108,7 +131,8 @@ now an independent forearm + fist.
 |-------|-------|---------|
 | Loop + ghost prototype | 8 | snapshot, replay, reset, HUD |
 | Sectors 1-4 + classes | 12 | mechanics, level design, 3D models |
-| Polish | 10 | shaders, audio, feedback, animation |
+| Sectors 5-8 + jump | 10 | elevation, timing gates, class/terrain puzzles |
+| Polish | 8 | shaders, procedural audio, menu, feedback |
 | Web co-op | 12 | signaling, ghost sync, lobby |
 | Tests + submission | 8 | Godot tests, Web export, README, demo video |
 

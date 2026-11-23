@@ -7,7 +7,8 @@
 A time-loop escape room built for **PHANTOM**, the Hack Club hackathon. You are
 a pilot jumping between 3D robot shells. Every shell you abandon stays behind
 and keeps holding its position, so you can cooperate with your own past bodies.
-Four sectors, four robot classes, each with its own ability.
+Eight sectors, four robot classes, a jump, procedural sound effects and a start
+menu with a live 3D background.
 
 ## Contents
 
@@ -15,6 +16,7 @@ Four sectors, four robot classes, each with its own ability.
 - [How to play](#how-to-play)
 - [Robot classes](#robot-classes)
 - [Sectors](#sectors)
+- [Audio and menu](#audio-and-menu)
 - [Controls](#controls)
 - [Run from source](#run-from-source)
 - [Web export](#web-export)
@@ -49,7 +51,7 @@ facility. Stand on all the glowing plates at the same time to open the door.
 * A parked shell replays its last route and then **freezes**, so it keeps
   holding its plate forever instead of walking away.
 * You have only **3 copies** per sector. Using a fourth transfer is a **game
-  over**; press `R` to restart the run. The HUD shows how many copies remain.
+  over**; press `R` to repeat **the sector you are in**.
 * Every new shell spawns facing the room. Once all plates are lit, the door
   stays open while you walk through it. Crossing it closes the door and loads
   the next sector automatically.
@@ -74,11 +76,28 @@ piloting. Parked shells keep the class they had when transferred.
 | 2 | **Heavy Foundry** | Anchor-only plate behind a wall |
 | 3 | **Magnet Bay** | Pull the gold core onto a dark pad |
 | 4 | **Phase Vault** | Phase wall plus a Spark remote pad |
+| 5 | **Step Ladder** | Jump onto blue steps to reach an elevated pad |
+| 6 | **Grated Cell** | Spark through a grate, Phase through a full-width wall |
+| 7 | **Magnet Ridge** | Jump to a high pad, then lead the core through a slit |
+| 8 | **Sweeping Gate** | Jump a low bar, then time the rising red gate |
+
+Elevated pads check height too: standing underneath one does nothing, so the
+jump is part of the puzzle rather than decoration.
 
 Everything is animated procedurally: the hands bob and sway with movement
 (each class has its own tool instead of a bar between them), parked shells walk
 in place, plates pulse, the door slides into the floor and transfers flash the
 screen in the current class colour.
+
+## Audio and menu
+
+The boot screen is a neon-framed gradient over the live 3D room. Press `Enter`,
+`Space` or START to begin; clearing sector 8 returns to the menu with
+`RUN COMPLETE`.
+
+Every sound is synthesised at runtime into `AudioStreamWAV` data, so there are no
+audio files to download: alternating footsteps (triggered by distance travelled),
+jump, landing, plate activation, door, transfer, win, game over and UI clicks.
 
 Full design notes: [docs/PHANTOM_LOOP.md](docs/PHANTOM_LOOP.md).
 
@@ -86,7 +105,9 @@ Full design notes: [docs/PHANTOM_LOOP.md](docs/PHANTOM_LOOP.md).
 
 | Input | Action |
 | --- | --- |
+| `Enter` / `Space` / START | Leave the menu and begin |
 | `W A S D` | Move the current shell |
+| `Space` | Jump (needed for elevated pads and low barriers) |
 | Mouse | Look (drag with left button on Web, captured on desktop) |
 | `1` - `4` | Select Anchor / Magnet / Spark / Phase |
 | `E` | Transfer to the next shell |
@@ -94,7 +115,7 @@ Full design notes: [docs/PHANTOM_LOOP.md](docs/PHANTOM_LOOP.md).
 | Class buttons | Same as `1`-`4` (always clickable on Web) |
 | `SKIP / TRANSFER BODY` button | Same as `Enter` |
 | `Esc` | Release the mouse on desktop (next click captures it again) |
-| `R` | Restart the whole run at any time |
+| `R` | Repeat the current sector only |
 
 The mouse stays locked across transfers and sector changes. On Web, drag look
 stays active after a door transition too, so you do not have to click again.
@@ -139,21 +160,21 @@ skips the export with a warning instead of failing.
 
 ```
 phantom-loop/
-├── project.godot          # Godot config + WASD/E/R input map
+├── project.godot          # Godot config + WASD/Space/E/R input map
 ├── export_presets.cfg     # Web preset
 ├── docs/
 │   ├── COPY_ME.md         # exact copy of the game source
 │   └── PHANTOM_LOOP.md    # design doc + 50 h roadmap
 ├── scripts/
 │   ├── phantom_loop.gd    # controller, ghosts, plates, HUD, sector flow
-│   ├── level_data.gd      # 4 sector definitions
+│   ├── level_data.gd      # 8 sector definitions
 │   └── robot_shell.gd     # procedural 3D robot + class colours
 ├── shaders/
 │   └── ghost.gdshader     # spectral ghost material
 ├── scenes/
 │   └── main.tscn          # main scene
 ├── tests/
-│   └── smoke_test.gd      # headless checks for plates, ghosts, classes
+│   └── smoke_test.gd      # headless checks for plates, jump, audio, menu
 └── .github/workflows/     # Web export + Pages deployment
 ```
 

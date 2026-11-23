@@ -106,4 +106,39 @@ func _init() -> void:
 		shell.free()
 		vm.free()
 	print("VIEWMODELS_OK=", models_ok)
+
+	# 11. A queued jump actually lifts the shell off the floor.
+	main.call("_load_level", 0)
+	main.set("_jump_queued", true)
+	for i in range(3):
+		main.call("_step", 1.0 / 60.0)
+	print("JUMP=", player.velocity.y > 0.0 and player.global_position.y > 0.9)
+
+	# 12. Elevated plates need height, not just XZ overlap.
+	main.call("_load_level", 4)
+	var high: Dictionary = (main.get("_plates") as Array)[2]
+	player.global_position = Vector3(high["pos"].x, 0.8, high["pos"].z)
+	main.call("_step", 1.0 / 60.0)
+	var under: bool = high["active"]
+	player.global_position = high["pos"] + Vector3(0.0, 0.7, 0.0)
+	main.call("_step", 1.0 / 60.0)
+	print("HIGH_PLATE_UNDER_FALSE=", not under, " ON_PLATFORM=", high["active"])
+
+	# 13. The red gate moves with the loop clock.
+	main.call("_load_level", 7)
+	var movers: Array = main.get("_movers")
+	var gate: Node3D = movers[0]["body"]
+	var gate_start: Vector3 = gate.global_position
+	for i in range(30):
+		main.call("_step", 1.0 / 60.0)
+	print("GATE_MOVES=", gate.global_position.distance_to(gate_start) > 0.1)
+
+	# 14. Boot menu, audio and R repeating the current sector only.
+	main.call("_start_game")
+	var closed_menu: bool = not bool(main.get("_in_menu"))
+	main.set("_level_idx", 5)
+	main.call("_restart_level")
+	print("MENU_CLOSED=", closed_menu, " R_KEEPS_LEVEL=", main.get("_level_idx") == 5)
+	print("AUDIO_READY=", (main.get("_audio") as Dictionary).size(), " MENU_READY=", main.get("_menu") != null)
+	main.call("_shutdown_audio")
 	quit()
