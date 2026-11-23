@@ -40,19 +40,19 @@ Source code:
 ## How to play
 
 You are not the robot: you are the **pilot** of a fleet of shells in a derelict
-facility. Each shell has 30 seconds of power. Stand on all the glowing plates at
-the same time to open the door.
+facility. Stand on all the glowing plates at the same time to open the door.
 
 * Plates are **automatic**: any shell standing on one lights it. No button needed.
 * `E`, `Enter` or the `SKIP / TRANSFER BODY` button transfers you into a fresh
-  shell at the entry point. Timer expiry transfers you too.
+  shell at the entry point. **There is no timer** - nothing transfers you unless
+  you decide to. The HUD shows a stopwatch.
 * A parked shell replays its last route and then **freezes**, so it keeps
   holding its plate forever instead of walking away.
-* Only **3 shells can be parked** per sector. Beyond that, transfers still reset
-  the timer but add no ghost, and the HUD shows `NO SHELLS LEFT - press R`.
-* Every new shell spawns facing the room. Once all plates are lit, the door stays
-  open so you can walk through it. Reaching it clears the sector: press `Enter`
-  for the next one.
+* You have only **3 copies** per sector. Using a fourth transfer is a **game
+  over**; press `R` to restart the run. The HUD shows how many copies remain.
+* Every new shell spawns facing the room. Once all plates are lit, the door
+  stays open while you walk through it. Crossing it closes the door and loads
+  the next sector automatically.
 
 ## Robot classes
 
@@ -90,7 +90,7 @@ Full design notes: [docs/PHANTOM_LOOP.md](docs/PHANTOM_LOOP.md).
 | Mouse | Look (drag with left button on Web, captured on desktop) |
 | `1` - `4` | Select Anchor / Magnet / Spark / Phase |
 | `E` | Transfer to the next shell |
-| `Enter` | Transfer, or advance after clearing a sector |
+| `Enter` | Transfer to the next shell |
 | Class buttons | Same as `1`-`4` (always clickable on Web) |
 | `SKIP / TRANSFER BODY` button | Same as `Enter` |
 | `Esc` | Release the mouse on desktop |

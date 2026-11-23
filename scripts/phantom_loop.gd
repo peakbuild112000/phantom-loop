@@ -3,7 +3,6 @@ extends Node3D
 ## PHANTOM LOOP - main controller (Godot 4.6.1).
 ## You are the pilot. Park shells to hold plates, then move to the next sector.
 
-const LOOP_SECONDS := 30.0
 const TICK := 1.0 / 60.0
 const SPEED := 6.0
 const MAX_GHOSTS := 3
@@ -14,7 +13,7 @@ const LevelData = preload("res://scripts/level_data.gd")
 
 var _levels: Array[Dictionary] = []
 var _level_idx := 0
-var _time_left := LOOP_SECONDS
+var _elapsed := 0.0
 var _acc := 0.0
 var _frames: Array[Dictionary] = []
 var _recordings: Array[Array] = []
@@ -36,6 +35,8 @@ var _class_buttons: Array[Button] = []
 var _current_class := 0
 var _loops := 1
 var _won := false
+var _game_over := false
+var _transition := 0.0
 var _door_latched := false
 var _pitch := 0.0
 var _dragging := false
@@ -60,7 +61,7 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("restart"):
 		get_tree().reload_current_scene()
 		return
-	if _won:
+	if _won or _game_over or _transition > 0.0:
 		return
 	_acc += delta
 	var steps := 0
@@ -72,6 +73,13 @@ func _physics_process(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	_anim_t += delta
+	# Walking through the door closes it, then loads the next sector on its own.
+	if _won and _transition > 0.0:
+		_transition -= delta
+		if _transition <= 0.0:
+			_advance_level()
+	if _game_over:
+		_flash_alpha = 0.3
 	# Door slides down into the floor instead of popping out of existence.
 	_door_y = lerpf(_door_y, _door_target_y, clampf(delta * 9.0, 0.0, 1.0))
 	if _door != null:
@@ -120,12 +128,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_3: _select_class(2)
 			KEY_4: _select_class(3)
 			KEY_ENTER:
-				if _won:
-					_advance_level()
-				else:
+				if not _won and not _game_over:
 					_finish_loop()
 			KEY_E:
-				if not _won:
+				if not _won and not _game_over:
 					_finish_loop()
 			KEY_ESCAPE:
 				_dragging = false
@@ -133,7 +139,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	var look := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 	if OS.has_feature("web"):
 		look = _dragging
-	if event is InputEventMouseMotion and look and not _won:
+	if event is InputEventMouseMotion and look and not _won and not _game_over:
 		_player.rotate_y(-event.relative.x * 0.0025)
 		_pitch = clampf(_pitch - event.relative.y * 0.0025, -1.2, 1.2)
 		_cam.rotation.x = _pitch
@@ -145,10 +151,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func _step(dt: float) -> void:
-	_time_left -= dt
-	if _time_left <= 0.0:
-		_finish_loop()
-		return
+	_elapsed += dt
 	var input := Input.get_vector("move_left", "move_right", "move_back", "move_forward")
 	var local := Vector3(input.x, 0.0, -input.y)
 	var dir := (_player.global_transform.basis * local).normalized()
@@ -234,9 +237,16 @@ func _move_key(dt: float) -> void:
 		_key.global_position = Vector3(from.x + dir.x * step, _key_start.y + sin(_anim_t * 3.0) * 0.05, from.z + dir.z * step)
 
 func _finish_loop() -> void:
-	if _won:
+	if _won or _game_over:
 		return
-	if _frames.size() > 2 and _recordings.size() < MAX_GHOSTS:
+	# No shells left: this transfer is a loss, not another free reset.
+	if _recordings.size() >= MAX_GHOSTS:
+		_game_over = true
+		_flash.color = Color(0.75, 0.06, 0.12, 0.3)
+		_flash_alpha = 0.3
+		_update_hud()
+		return
+	if _frames.size() > 2:
 		_recordings.append(_frames.duplicate(true))
 	var c: Color = RobotShell.CLASS_COLORS[_current_class]
 	_flash.color = Color(c.r, c.g, c.b, 0.32)
@@ -246,7 +256,7 @@ func _finish_loop() -> void:
 
 func _reset_room() -> void:
 	var level: Dictionary = _levels[_level_idx]
-	_time_left = LOOP_SECONDS
+	_elapsed = 0.0
 	_acc = 0.0
 	_frames.clear()
 	_door_latched = false
@@ -307,6 +317,11 @@ func _select_class(cls: int) -> void:
 func _win() -> void:
 	_won = true
 	_dragging = false
+	_door_col.disabled = false
+	_door_target_y = 1.5
+	_flash.color = Color(0.6, 1.0, 0.8, 0.55)
+	_flash_alpha = 0.55
+	_transition = 0.45
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_update_hud()
 
@@ -325,6 +340,8 @@ func _load_level(idx: int) -> void:
 	_recordings.clear()
 	_loops = 1
 	_won = false
+	_game_over = false
+	_transition = 0.0
 	_key = null
 	var level: Dictionary = _levels[idx]
 	_build_room()
@@ -352,12 +369,15 @@ func _update_hud() -> void:
 	for p in _plates:
 		if p["active"]:
 			active += 1
-	var msg := "%s  |  %04.1fs  |  shell %d/%d  |  parked %d/%d  |  plates %d/%d\n" % [level["name"], _time_left, mini(_loops, MAX_GHOSTS + 1), MAX_GHOSTS + 1, _ghosts.size(), MAX_GHOSTS, active, _plates.size()]
+	var left := MAX_GHOSTS - _recordings.size()
+	var msg := "%s  |  T+%04.1fs  |  shell %d  |  copies left %d/%d  |  plates %d/%d\n" % [level["name"], _elapsed, mini(_loops, MAX_GHOSTS + 1), left, MAX_GHOSTS, active, _plates.size()]
 	msg += "CLASS: %s  |  %s\n" % [RobotShell.CLASS_NAMES[_current_class], level["hint"]]
-	if _won:
-		msg = "SECTOR CLEAR - %s in %d shells\nPress Enter for the next sector - R restarts." % [level["name"], _loops]
-	elif _recordings.size() >= MAX_GHOSTS:
-		msg += "NO SHELLS LEFT - press R to restart\n"
+	if _game_over:
+		msg = "GAME OVER - OUT OF COPIES\nPress R to restart the run"
+	elif _won:
+		msg = "SECTOR CLEAR - %s in %d shells\nOpening next sector..." % [level["name"], _loops]
+	elif left == 0:
+		msg += "LAST COPY - solve this sector or the next transfer loses\n"
 	_label.text = msg
 
 func _build_room() -> void:

@@ -17,16 +17,15 @@ bodies. Four sectors introduce four robot classes with distinct abilities.
 
 ## Loop
 
-1. A fresh shell boots at the entry point with 30 seconds of power, facing the
-   room (never a wall).
+1. A fresh shell boots at the entry point, facing the room (never a wall).
 2. Drive it where you need it, then press `E` / `Enter` or the skip button to
-   transfer. Timer expiry forces a transfer too.
+   transfer. There is **no timer**: a transfer only happens when you choose it.
 3. The abandoned shell becomes a ghost that replays its route and freezes at
    the end, keeping its plate held.
-4. Stack up to **3** parked shells (`MAX_GHOSTS`) until every condition is true.
-   Further transfers reset the timer but add no ghost.
-5. Walk the current shell through the door, press `Enter`, and start the next
-   sector with a fresh set of shells.
+4. You have **3 copies** (`MAX_GHOSTS`). A fourth transfer is a **game over**
+   with a red flash and a `GAME OVER` screen; `R` restarts the run.
+5. Walk the current shell through the door. It closes behind you and the next
+   sector loads automatically after a short flash transition.
 
 ## Simulation rules
 
@@ -41,12 +40,14 @@ bodies. Four sectors introduce four robot classes with distinct abilities.
   so there is no physics-frame lag or missed trigger volume.
 * Plate rules: `ANY` accepts every class; a class id accepts only that class;
   `KEY` accepts only the gold core when it is close enough.
-* Every transfer path (`E`, `Enter`, button, timer) calls the same `_finish_loop()`.
-* Room reset: original positions, timer, plate colour, key position, door
+* Every transfer path (`E`, `Enter`, button) calls the same `_finish_loop()`,
+  which checks the copy budget first and switches to the game-over state when
+  it is exhausted.
+* Room reset: original positions, stopwatch, plate colour, key position, door
   collision, player yaw and drag state.
-* Once all plates are active, the door is **latched open** until the next
-  transfer. Without this, the player had to leave the last plate to reach the
-  door, which closed it again and made the third loop look empty.
+* Once all plates are active, the door is **latched open** until the player
+  crosses it. Crossing re-enables the collision, slides the door shut and starts
+  a 0.45 s transition that loads the next sector automatically.
 * Mouse look: yaw rotates the player, pitch rotates the camera, clamped to
   +/-1.2 rad so the view cannot flip. On Web, click-drag replaces pointer lock
   so the HUD buttons stay clickable.

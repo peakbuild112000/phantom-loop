@@ -58,4 +58,28 @@ func _init() -> void:
 	for i in range(120):
 		main.call("_step", 1.0 / 60.0)
 	print("KEY_MOVED=", key.global_position.distance_to(before) > 1.0)
+
+	# 6. No timer-driven transfer: 40 simulated seconds change nothing by themselves.
+	main.call("_load_level", 0)
+	var loops_before: int = main.get("_loops")
+	var ghosts_before: int = (main.get("_recordings") as Array).size()
+	for i in range(2400):
+		main.call("_step", 1.0 / 60.0)
+	print("NO_AUTO_TRANSFER=", main.get("_loops") == loops_before and (main.get("_recordings") as Array).size() == ghosts_before)
+
+	# 7. A fourth transfer is a game over.
+	for i in range(4):
+		for j in range(4):
+			main.call("_step", 1.0 / 60.0)
+		main.call("_finish_loop")
+	print("GAME_OVER=", main.get("_game_over"), " LEVEL_IDX=", main.get("_level_idx"))
+
+	# 8. Walking through the door closes it and advances the sector automatically.
+	main.call("_load_level", 0)
+	main.set("_door_latched", true)
+	player.global_position = Vector3(0.0, 1.0, -9.0)
+	main.call("_step", 1.0 / 60.0)
+	print("DOOR_CROSS_WON=", main.get("_won"), " TRANSITION=", main.get("_transition") > 0.0)
+	main.call("_process", 0.5)
+	print("AUTO_NEXT_LEVEL=", main.get("_level_idx") == 1)
 	quit()
