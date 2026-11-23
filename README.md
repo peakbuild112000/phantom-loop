@@ -75,6 +75,11 @@ piloting. Parked shells keep the class they had when transferred.
 | 3 | **Magnet Bay** | Pull the gold core onto a dark pad |
 | 4 | **Phase Vault** | Phase wall plus a Spark remote pad |
 
+Everything is animated procedurally: the hands bob and sway with movement
+(each class has its own tool instead of a bar between them), parked shells walk
+in place, plates pulse, the door slides into the floor and transfers flash the
+screen in the current class colour.
+
 Full design notes: [docs/PHANTOM_LOOP.md](docs/PHANTOM_LOOP.md).
 
 ## Controls

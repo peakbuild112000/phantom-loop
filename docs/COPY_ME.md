@@ -98,6 +98,13 @@ const CLASS_COLORS = [
 ]
 
 var shell_class: int = 0
+var _torso: MeshInstance3D
+var _head: Node3D
+var _arm_l: Node3D
+var _arm_r: Node3D
+var _leg_l: Node3D
+var _leg_r: Node3D
+var _eye: MeshInstance3D
 
 func setup(cls: int, ghost: bool) -> void:
 	shell_class = cls
@@ -114,20 +121,38 @@ func setup(cls: int, ghost: bool) -> void:
 		ghost_mat = ShaderMaterial.new()
 		ghost_mat.shader = load("res://shaders/ghost.gdshader") as Shader
 		ghost_mat.set_shader_parameter("tint", color)
-	_add_box(Vector3(0.0, 0.15, 0.0), Vector3(0.72, 0.80, 0.46), mat, ghost_mat)
-	_add_box(Vector3(0.0, 0.76, 0.0), Vector3(0.52, 0.42, 0.44), mat, ghost_mat)
+	_torso = _add_box(Vector3(0.0, 0.15, 0.0), Vector3(0.72, 0.80, 0.46), mat, ghost_mat)
 	_add_box(Vector3(0.0, 0.20, 0.33), Vector3(0.50, 0.50, 0.22), mat, ghost_mat)
-	_add_capsule(Vector3(-0.52, 0.12, 0.0), 0.13, 0.62, mat, ghost_mat)
-	_add_capsule(Vector3(0.52, 0.12, 0.0), 0.13, 0.62, mat, ghost_mat)
-	_add_capsule(Vector3(-0.20, -0.70, 0.0), 0.15, 0.72, mat, ghost_mat)
-	_add_capsule(Vector3(0.20, -0.70, 0.0), 0.15, 0.72, mat, ghost_mat)
-	var eye := _add_sphere(Vector3(0.0, 0.78, -0.24), 0.11, mat, ghost_mat)
+	_head = _pivot(Vector3(0.0, 0.62, 0.0))
+	_add_box_child(_head, Vector3(0.0, 0.14, 0.0), Vector3(0.52, 0.42, 0.44), mat, ghost_mat)
+	_eye = _add_sphere_child(_head, Vector3(0.0, 0.16, -0.24), 0.11, mat, ghost_mat)
 	var eye_mat := StandardMaterial3D.new()
 	eye_mat.albedo_color = Color.WHITE
 	eye_mat.emission_enabled = true
 	eye_mat.emission = color
 	eye_mat.emission_energy_multiplier = 3.0
-	eye.material_override = eye_mat if not ghost else ghost_mat
+	_eye.material_override = eye_mat if not ghost else ghost_mat
+	_arm_l = _pivot(Vector3(-0.52, 0.45, 0.0))
+	_add_capsule_child(_arm_l, Vector3(0.0, -0.33, 0.0), 0.13, 0.62, mat, ghost_mat)
+	_arm_r = _pivot(Vector3(0.52, 0.45, 0.0))
+	_add_capsule_child(_arm_r, Vector3(0.0, -0.33, 0.0), 0.13, 0.62, mat, ghost_mat)
+	_leg_l = _pivot(Vector3(-0.20, -0.34, 0.0))
+	_add_capsule_child(_leg_l, Vector3(0.0, -0.36, 0.0), 0.15, 0.72, mat, ghost_mat)
+	_leg_r = _pivot(Vector3(0.20, -0.34, 0.0))
+	_add_capsule_child(_leg_r, Vector3(0.0, -0.36, 0.0), 0.15, 0.72, mat, ghost_mat)
+
+func animate(t: float, speed: float) -> void:
+	var amount := clampf(speed / 6.0, 0.0, 1.0)
+	var swing := sin(t * 10.0) * 0.65 * amount
+	_arm_l.rotation.x = swing
+	_arm_r.rotation.x = -swing
+	_leg_l.rotation.x = -swing
+	_leg_r.rotation.x = swing
+	_torso.position.y = 0.15 + absf(sin(t * 10.0)) * 0.05 * amount
+	_head.rotation.z = sin(t * 2.0) * 0.05
+	_head.rotation.y = sin(t * 1.3) * 0.08
+	var pulse := 1.0 + 0.12 * sin(t * 5.0)
+	_eye.scale = Vector3(pulse, pulse, pulse)
 
 static func make_viewmodel(cls: int) -> Node3D:
 	var root := Node3D.new()
@@ -138,34 +163,84 @@ static func make_viewmodel(cls: int) -> Node3D:
 	mat.emission_enabled = true
 	mat.emission = color
 	mat.emission_energy_multiplier = 0.6
-	for x in [-0.32, 0.32]:
-		var hand := MeshInstance3D.new()
-		var b := BoxMesh.new()
-		b.size = Vector3(0.22, 0.18, 0.50)
-		hand.mesh = b
-		hand.material_override = mat
-		hand.position = Vector3(x, -0.34, -0.55)
-		root.add_child(hand)
-	var panel := MeshInstance3D.new()
-	var p := BoxMesh.new()
-	p.size = Vector3(0.50, 0.10, 0.06)
-	panel.mesh = p
-	panel.material_override = mat
-	panel.position = Vector3(0.0, -0.43, -0.80)
-	root.add_child(panel)
+	_make_hand(root, "HandL", -1.0, mat)
+	_make_hand(root, "HandR", 1.0, mat)
+	var tool := MeshInstance3D.new()
+	match cls:
+		0:
+			var b := BoxMesh.new()
+			b.size = Vector3(0.30, 0.24, 0.20)
+			tool.mesh = b
+			tool.position = Vector3(0.0, 0.02, -0.26)
+		1:
+			var t := TorusMesh.new()
+			t.inner_radius = 0.09
+			t.outer_radius = 0.17
+			tool.mesh = t
+			tool.rotation_degrees = Vector3(0.0, 0.0, 90.0)
+			tool.position = Vector3(0.0, 0.0, -0.24)
+		2:
+			var c := CylinderMesh.new()
+			c.radius = 0.07
+			c.height = 0.34
+			tool.mesh = c
+			tool.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+			tool.position = Vector3(0.0, 0.0, -0.28)
+		3:
+			var blade := BoxMesh.new()
+			blade.size = Vector3(0.05, 0.06, 0.46)
+			tool.mesh = blade
+			tool.position = Vector3(0.0, 0.0, -0.32)
+	tool.material_override = mat
+	tool.name = "Tool"
+	(root.get_node("HandR") as Node3D).add_child(tool)
 	return root
 
+static func _make_hand(root: Node3D, hand_name: String, side: float, mat: Material) -> void:
+	var hand := Node3D.new()
+	hand.name = hand_name
+	hand.position = Vector3(0.32 * side, -0.30, -0.52)
+	hand.rotation.y = -0.12 * side
+	root.add_child(hand)
+	var forearm := MeshInstance3D.new()
+	var sleeve := BoxMesh.new()
+	sleeve.size = Vector3(0.20, 0.19, 0.52)
+	forearm.mesh = sleeve
+	forearm.material_override = mat
+	forearm.position = Vector3(0.0, -0.02, 0.24)
+	forearm.rotation.x = -0.10
+	hand.add_child(forearm)
+	var fist := MeshInstance3D.new()
+	var knuckle := BoxMesh.new()
+	knuckle.size = Vector3(0.24, 0.20, 0.22)
+	fist.mesh = knuckle
+	fist.material_override = mat
+	fist.position = Vector3(0.0, 0.0, -0.10)
+	hand.add_child(fist)
+
+func _pivot(pos: Vector3) -> Node3D:
+	var p := Node3D.new()
+	p.position = pos
+	add_child(p)
+	return p
+
 func _add_box(pos: Vector3, size: Vector3, mat: Material, ghost_mat: Material) -> MeshInstance3D:
+	return _add_box_child(self, pos, size, mat, ghost_mat)
+
+func _add_box_child(parent: Node, pos: Vector3, size: Vector3, mat: Material, ghost_mat: Material) -> MeshInstance3D:
 	var m := MeshInstance3D.new()
 	var b := BoxMesh.new()
 	b.size = size
 	m.mesh = b
 	m.position = pos
 	m.material_override = ghost_mat if ghost_mat != null else mat
-	add_child(m)
+	parent.add_child(m)
 	return m
 
 func _add_capsule(pos: Vector3, radius: float, height: float, mat: Material, ghost_mat: Material) -> MeshInstance3D:
+	return _add_capsule_child(self, pos, radius, height, mat, ghost_mat)
+
+func _add_capsule_child(parent: Node, pos: Vector3, radius: float, height: float, mat: Material, ghost_mat: Material) -> MeshInstance3D:
 	var m := MeshInstance3D.new()
 	var c := CapsuleMesh.new()
 	c.radius = radius
@@ -173,17 +248,20 @@ func _add_capsule(pos: Vector3, radius: float, height: float, mat: Material, gho
 	m.mesh = c
 	m.position = pos
 	m.material_override = ghost_mat if ghost_mat != null else mat
-	add_child(m)
+	parent.add_child(m)
 	return m
 
 func _add_sphere(pos: Vector3, radius: float, mat: Material, ghost_mat: Material) -> MeshInstance3D:
+	return _add_sphere_child(self, pos, radius, mat, ghost_mat)
+
+func _add_sphere_child(parent: Node, pos: Vector3, radius: float, mat: Material, ghost_mat: Material) -> MeshInstance3D:
 	var m := MeshInstance3D.new()
 	var s := SphereMesh.new()
 	s.radius = radius
 	m.mesh = s
 	m.position = pos
 	m.material_override = ghost_mat if ghost_mat != null else mat
-	add_child(m)
+	parent.add_child(m)
 	return m
 ```
 
@@ -233,6 +311,12 @@ var _won := false
 var _door_latched := false
 var _pitch := 0.0
 var _dragging := false
+var _anim_t := 0.0
+var _ghost_speeds: Array[float] = []
+var _door_y := 1.5
+var _door_target_y := 1.5
+var _flash: ColorRect
+var _flash_alpha := 0.0
 
 func _ready() -> void:
 	_levels = LevelData.all()
@@ -257,6 +341,48 @@ func _physics_process(delta: float) -> void:
 		_acc -= TICK
 		steps += 1
 	_update_hud()
+
+func _process(delta: float) -> void:
+	_anim_t += delta
+	# Door slides down into the floor instead of popping out of existence.
+	_door_y = lerpf(_door_y, _door_target_y, clampf(delta * 9.0, 0.0, 1.0))
+	if _door != null:
+		_door.position.y = _door_y
+	# First-person hands: walking bob plus a slow idle sway.
+	if _viewmodel != null:
+		var amount := clampf(_player.velocity.length() / SPEED, 0.0, 1.0)
+		_viewmodel.position.x = sin(_anim_t * 5.0) * 0.006 * amount
+		_viewmodel.position.y = sin(_anim_t * 10.0) * 0.012 * amount + sin(_anim_t * 2.0) * 0.003
+		_viewmodel.rotation.z = sin(_anim_t * 5.0) * 0.02 * amount
+		_viewmodel.rotation.x = -0.02 + absf(sin(_anim_t * 10.0)) * 0.025 * amount
+		var hl := _viewmodel.get_node_or_null("HandL")
+		var hr := _viewmodel.get_node_or_null("HandR")
+		if hl != null:
+			(hl as Node3D).rotation.x = sin(_anim_t * 10.0) * 0.12 * amount
+		if hr != null:
+			(hr as Node3D).rotation.x = -sin(_anim_t * 10.0) * 0.12 * amount
+	# Parked shells walk in place with their recorded motion.
+	for i in _ghosts.size():
+		var model := _ghosts[i].get_child(0)
+		if model.has_method("animate"):
+			model.animate(_anim_t + float(i) * 0.7, _ghost_speeds[i] if i < _ghost_speeds.size() else 0.0)
+	# Lit plates breathe; the key core spins and hovers.
+	for plate in _plates:
+		if plate["active"]:
+			var mat: StandardMaterial3D = plate["mat"]
+			mat.emission_energy_multiplier = 1.6 + 0.6 * sin(_anim_t * 6.0)
+			var ring: MeshInstance3D = plate["ring"]
+			var s := 1.0 + 0.04 * sin(_anim_t * 6.0)
+			ring.scale = Vector3(s, s, s)
+	if _key != null:
+		_key.rotation.y += delta * 1.6
+	# Transfer flash fades out and gives a small FOV punch.
+	if _flash_alpha > 0.0:
+		_flash_alpha = maxf(0.0, _flash_alpha - delta * 2.2)
+		_flash.color.a = _flash_alpha
+		_cam.fov = 75.0 + 5.0 * _flash_alpha
+	elif _cam.fov != 75.0:
+		_cam.fov = 75.0
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed:
@@ -310,7 +436,10 @@ func _step(dt: float) -> void:
 		if _cursors[i] >= frames.size():
 			_cursors[i] = frames.size() - 1
 		var f: Dictionary = frames[_cursors[i]]
+		var previous: Vector3 = _ghosts[i].global_position
 		_ghosts[i].global_position = f["pos"]
+		if i < _ghost_speeds.size():
+			_ghost_speeds[i] = previous.distance_to(_ghosts[i].global_position) / dt
 		_cursors[i] += 1
 		_ghosts[i].visible = _ghosts[i].global_position.distance_to(_player.global_position) > 1.4
 
@@ -374,13 +503,16 @@ func _move_key(dt: float) -> void:
 		var to := target.global_position
 		var dir := Vector3(to.x - from.x, 0.0, to.z - from.z).normalized()
 		var step := minf(2.5 * dt, best)
-		_key.global_position = Vector3(from.x + dir.x * step, _key_start.y, from.z + dir.z * step)
+		_key.global_position = Vector3(from.x + dir.x * step, _key_start.y + sin(_anim_t * 3.0) * 0.05, from.z + dir.z * step)
 
 func _finish_loop() -> void:
 	if _won:
 		return
 	if _frames.size() > 2 and _recordings.size() < MAX_GHOSTS:
 		_recordings.append(_frames.duplicate(true))
+	var c: Color = RobotShell.CLASS_COLORS[_current_class]
+	_flash.color = Color(c.r, c.g, c.b, 0.32)
+	_flash_alpha = 0.32
 	_loops += 1
 	_reset_room()
 
@@ -397,6 +529,9 @@ func _reset_room() -> void:
 	_player.global_position = level["spawn"]
 	_player.velocity = Vector3.ZERO
 	_player.collision_mask = 1 if _current_class == 3 else 5
+	_door_y = 1.5
+	_door_target_y = 1.5
+	_door.position.y = _door_y
 	_open_door(false)
 	if _key != null:
 		_key.global_position = _key_start
@@ -404,17 +539,20 @@ func _reset_room() -> void:
 		g.queue_free()
 	_ghosts.clear()
 	_ghost_classes.clear()
+	_ghost_speeds.clear()
 	_cursors.clear()
 	for rec in _recordings:
 		var cls: int = rec[rec.size() - 1]["cls"] if not rec.is_empty() else 0
 		_ghosts.append(_make_ghost(cls))
 		_ghost_classes.append(cls)
+		_ghost_speeds.append(0.0)
 		_cursors.append(0)
 	for plate in _plates:
 		plate["active"] = false
 		var mat: StandardMaterial3D = plate["mat"]
 		mat.albedo_color = plate["off_color"]
 		mat.emission_energy_multiplier = 0.25
+		(plate["ring"] as MeshInstance3D).scale = Vector3.ONE
 
 func _make_ghost(cls: int) -> Node3D:
 	var g := CharacterBody3D.new()
@@ -474,8 +612,9 @@ func _load_level(idx: int) -> void:
 	_reset_room()
 
 func _open_door(open: bool) -> void:
-	_door.visible = not open
+	_door.visible = true
 	_door_col.disabled = open
+	_door_target_y = -1.7 if open else 1.5
 
 func _update_hud() -> void:
 	if _levels.is_empty():
@@ -594,6 +733,7 @@ func _make_plate(p: Dictionary) -> Area3D:
 		"need": need,
 		"r": p.get("r", 1.15),
 		"mat": mat,
+		"ring": ring,
 		"off_color": off,
 		"active": false,
 	})
@@ -672,6 +812,11 @@ func _build_hud() -> void:
 		b.pressed.connect(_select_class.bind(i))
 		canvas.add_child(b)
 		_class_buttons.append(b)
+	_flash = ColorRect.new()
+	_flash.color = Color(1.0, 1.0, 1.0, 0.0)
+	_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	canvas.add_child(_flash)
 	add_child(canvas)
 ```
 
@@ -687,7 +832,9 @@ uniform vec3 tint = vec3(0.35, 0.85, 1.0);
 
 void fragment() {
 	ALBEDO = tint;
-	ALPHA = 0.35 + 0.15 * sin(TIME * 4.0);
+	float slow = sin(TIME * 4.0);
+	float flicker = sin(TIME * 11.0 + FRAGCOORD.y * 0.05);
+	ALPHA = 0.30 + 0.12 * slow + 0.06 * flicker;
 }
 ```
 
@@ -731,6 +878,21 @@ freezes, so it keeps holding whatever it was standing on.
 | `2` | Magnet | Pulls the gold core within 6 m | Cyan |
 | `3` | Spark | Lights remote pads within 3.6 m | Yellow |
 | `4` | Phase | Ignores phase walls | Purple |
+
+### Animation
+
+Everything is procedural, with no animation resources:
+
+- **Hands** are two separate arms with forearms and fists - no bar between
+  them. Each class gets its own tool on the right hand (fist, coil, emitter,
+  blade). They bob and sway with movement and sway back when you stop.
+- **Parked shells** swing their arms and legs at a speed derived from their
+  recorded motion, bob their torso, tilt their head and pulse their eye.
+- **Plates** breathe with a brighter emissive pulse and a slight ring scale
+  when lit. The gold core spins and hovers.
+- **Doors** slide down into the floor instead of disappearing instantly.
+- **Transfers** flash the screen in the current class colour and punch the FOV
+  briefly. The ghost shader adds a flicker on top of the slow fade.
 
 ### Sector reference
 

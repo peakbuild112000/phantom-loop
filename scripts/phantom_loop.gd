@@ -39,6 +39,12 @@ var _won := false
 var _door_latched := false
 var _pitch := 0.0
 var _dragging := false
+var _anim_t := 0.0
+var _ghost_speeds: Array[float] = []
+var _door_y := 1.5
+var _door_target_y := 1.5
+var _flash: ColorRect
+var _flash_alpha := 0.0
 
 func _ready() -> void:
 	_levels = LevelData.all()
@@ -63,6 +69,48 @@ func _physics_process(delta: float) -> void:
 		_acc -= TICK
 		steps += 1
 	_update_hud()
+
+func _process(delta: float) -> void:
+	_anim_t += delta
+	# Door slides down into the floor instead of popping out of existence.
+	_door_y = lerpf(_door_y, _door_target_y, clampf(delta * 9.0, 0.0, 1.0))
+	if _door != null:
+		_door.position.y = _door_y
+	# First-person hands: walking bob plus a slow idle sway.
+	if _viewmodel != null:
+		var amount := clampf(_player.velocity.length() / SPEED, 0.0, 1.0)
+		_viewmodel.position.x = sin(_anim_t * 5.0) * 0.006 * amount
+		_viewmodel.position.y = sin(_anim_t * 10.0) * 0.012 * amount + sin(_anim_t * 2.0) * 0.003
+		_viewmodel.rotation.z = sin(_anim_t * 5.0) * 0.02 * amount
+		_viewmodel.rotation.x = -0.02 + absf(sin(_anim_t * 10.0)) * 0.025 * amount
+		var hl := _viewmodel.get_node_or_null("HandL")
+		var hr := _viewmodel.get_node_or_null("HandR")
+		if hl != null:
+			(hl as Node3D).rotation.x = sin(_anim_t * 10.0) * 0.12 * amount
+		if hr != null:
+			(hr as Node3D).rotation.x = -sin(_anim_t * 10.0) * 0.12 * amount
+	# Parked shells walk in place with their recorded motion.
+	for i in _ghosts.size():
+		var model := _ghosts[i].get_child(0)
+		if model.has_method("animate"):
+			model.animate(_anim_t + float(i) * 0.7, _ghost_speeds[i] if i < _ghost_speeds.size() else 0.0)
+	# Lit plates breathe; the key core spins and hovers.
+	for plate in _plates:
+		if plate["active"]:
+			var mat: StandardMaterial3D = plate["mat"]
+			mat.emission_energy_multiplier = 1.6 + 0.6 * sin(_anim_t * 6.0)
+			var ring: MeshInstance3D = plate["ring"]
+			var s := 1.0 + 0.04 * sin(_anim_t * 6.0)
+			ring.scale = Vector3(s, s, s)
+	if _key != null:
+		_key.rotation.y += delta * 1.6
+	# Transfer flash fades out and gives a small FOV punch.
+	if _flash_alpha > 0.0:
+		_flash_alpha = maxf(0.0, _flash_alpha - delta * 2.2)
+		_flash.color.a = _flash_alpha
+		_cam.fov = 75.0 + 5.0 * _flash_alpha
+	elif _cam.fov != 75.0:
+		_cam.fov = 75.0
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed:
@@ -116,7 +164,10 @@ func _step(dt: float) -> void:
 		if _cursors[i] >= frames.size():
 			_cursors[i] = frames.size() - 1
 		var f: Dictionary = frames[_cursors[i]]
+		var previous: Vector3 = _ghosts[i].global_position
 		_ghosts[i].global_position = f["pos"]
+		if i < _ghost_speeds.size():
+			_ghost_speeds[i] = previous.distance_to(_ghosts[i].global_position) / dt
 		_cursors[i] += 1
 		_ghosts[i].visible = _ghosts[i].global_position.distance_to(_player.global_position) > 1.4
 
@@ -180,13 +231,16 @@ func _move_key(dt: float) -> void:
 		var to := target.global_position
 		var dir := Vector3(to.x - from.x, 0.0, to.z - from.z).normalized()
 		var step := minf(2.5 * dt, best)
-		_key.global_position = Vector3(from.x + dir.x * step, _key_start.y, from.z + dir.z * step)
+		_key.global_position = Vector3(from.x + dir.x * step, _key_start.y + sin(_anim_t * 3.0) * 0.05, from.z + dir.z * step)
 
 func _finish_loop() -> void:
 	if _won:
 		return
 	if _frames.size() > 2 and _recordings.size() < MAX_GHOSTS:
 		_recordings.append(_frames.duplicate(true))
+	var c: Color = RobotShell.CLASS_COLORS[_current_class]
+	_flash.color = Color(c.r, c.g, c.b, 0.32)
+	_flash_alpha = 0.32
 	_loops += 1
 	_reset_room()
 
@@ -203,6 +257,9 @@ func _reset_room() -> void:
 	_player.global_position = level["spawn"]
 	_player.velocity = Vector3.ZERO
 	_player.collision_mask = 1 if _current_class == 3 else 5
+	_door_y = 1.5
+	_door_target_y = 1.5
+	_door.position.y = _door_y
 	_open_door(false)
 	if _key != null:
 		_key.global_position = _key_start
@@ -210,17 +267,20 @@ func _reset_room() -> void:
 		g.queue_free()
 	_ghosts.clear()
 	_ghost_classes.clear()
+	_ghost_speeds.clear()
 	_cursors.clear()
 	for rec in _recordings:
 		var cls: int = rec[rec.size() - 1]["cls"] if not rec.is_empty() else 0
 		_ghosts.append(_make_ghost(cls))
 		_ghost_classes.append(cls)
+		_ghost_speeds.append(0.0)
 		_cursors.append(0)
 	for plate in _plates:
 		plate["active"] = false
 		var mat: StandardMaterial3D = plate["mat"]
 		mat.albedo_color = plate["off_color"]
 		mat.emission_energy_multiplier = 0.25
+		(plate["ring"] as MeshInstance3D).scale = Vector3.ONE
 
 func _make_ghost(cls: int) -> Node3D:
 	var g := CharacterBody3D.new()
@@ -280,8 +340,9 @@ func _load_level(idx: int) -> void:
 	_reset_room()
 
 func _open_door(open: bool) -> void:
-	_door.visible = not open
+	_door.visible = true
 	_door_col.disabled = open
+	_door_target_y = -1.7 if open else 1.5
 
 func _update_hud() -> void:
 	if _levels.is_empty():
@@ -400,6 +461,7 @@ func _make_plate(p: Dictionary) -> Area3D:
 		"need": need,
 		"r": p.get("r", 1.15),
 		"mat": mat,
+		"ring": ring,
 		"off_color": off,
 		"active": false,
 	})
@@ -478,4 +540,9 @@ func _build_hud() -> void:
 		b.pressed.connect(_select_class.bind(i))
 		canvas.add_child(b)
 		_class_buttons.append(b)
+	_flash = ColorRect.new()
+	_flash.color = Color(1.0, 1.0, 1.0, 0.0)
+	_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	canvas.add_child(_flash)
 	add_child(canvas)

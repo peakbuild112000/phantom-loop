@@ -93,7 +93,11 @@ tests/
 ```
 
 All robot, plate, door and key models are generated from meshes in code, so the
-project has no external asset dependency.
+project has no external asset dependency. Animation is also procedural: viewmodel
+bob/sway with per-class tools, ghost walk cycles driven by recorded speed,
+breathing plates, a spinning key, a sliding door and a class-coloured transfer
+flash. The old bar connecting the two viewmodel hands was removed - each hand is
+now an independent forearm + fist.
 
 ## 50-hour plan
 
