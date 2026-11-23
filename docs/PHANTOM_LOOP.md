@@ -5,9 +5,10 @@
 
 ## Concept
 
-A time-loop escape room. Every attempt is recorded and replayed by a ghost.
-Puzzles need several simultaneous actions, so the player has to cooperate with
-copies of themselves.
+A time-loop escape room with a robot-shell lore. You are a pilot transferring
+between bodies in a derelict facility. Every abandoned shell replays its last
+route and then freezes, so puzzles ask you to cooperate with your own past
+bodies instead of waiting for a timer.
 
 * **Target time:** 50 hours (PHANTOM goal: 50 fragments-hours).
 * **Engine:** Godot 4.6.1 stable, GL Compatibility renderer.
@@ -16,12 +17,13 @@ copies of themselves.
 
 ## Loop
 
-1. Enter a room, 30-second timer starts.
-2. Observe the plates and mechanisms.
-3. Solve part of the puzzle, fail, or let the timer expire.
-4. The attempt becomes a ghost that replays on every later loop.
-5. Stack ghosts until every condition is true at the same time.
-6. Move on to the next room.
+1. A fresh shell boots at the entry point with 30 seconds of power.
+2. Drive it onto a plate and press `E` to dock, or press `Enter` / the skip
+   button to transfer early. Timer expiry forces a transfer too.
+3. The abandoned shell becomes a ghost that replays its route and freezes at
+   the end, keeping its plate held.
+4. Stack parked shells until every condition is true at the same time.
+5. Walk the current shell through the door and move to the next room.
 
 ## Simulation rules
 
@@ -30,7 +32,10 @@ copies of themselves.
 * Replay by snapshot instead of input: deterministic on WebGL, with no reliance
   on physics for playback.
 * Ghosts are kinematic `CharacterBody3D` nodes: they trigger logical `Area3D`
-  nodes but do not push the player.
+  nodes but do not push the player. When their cursor reaches the end of the
+  recording it clamps to the last frame, so they stay parked on their plate.
+* Docking (`E` on a plate), `Enter`, the skip button and timer expiry all call
+  the same `finish_loop()` transfer path.
 * Room reset: original positions, timer, plate state, door collision.
 * Once all plates are active, the door is **latched open** until the next loop.
   Without this, the player had to leave the last plate to reach the door, which
@@ -62,6 +67,23 @@ shaders/
 tests/
   loop_test.gd       # verifies one recording = one replayed ghost
 ```
+
+## Planned robot classes (future levels)
+
+The lore is meant to grow into a class system. Every shell type gets one
+distinct ability so later rooms require combining them.
+
+| Shell | Ability | Puzzle use |
+|-------|---------|------------|
+| **Anchor** (current one) | Heavy, can dock on a plate with `E` | Holds switches in place |
+| **Magnet** | Pulls nearby metal props toward itself | Bridges gaps, drags keys |
+| **Spark** | Short burst that stuns drones / lights terminals | Disables hazards, remote panels |
+| **Mimer** | Copies the last route of the previously parked shell | Repeats a timed path without you |
+| **Phase** | Walks through one thin wall per level | Reaches isolated switch rooms |
+
+Implementation hint: add a `ShellClass` enum to the recording snapshot next to
+`pos` and `action`; replay code then dispatches to the matching ability instead
+of only moving the ghost.
 
 ## 50-hour plan
 

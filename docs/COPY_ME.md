@@ -34,6 +34,7 @@ var _door_col: CollisionShape3D
 var _player: CharacterBody3D
 var _cam: Camera3D
 var _label: Label
+var _skip_button: Button
 var _loops := 1
 var _won := false
 var _door_latched := false
@@ -69,6 +70,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if event is InputEventKey and event.keycode == KEY_ENTER and event.pressed and not _won:
+		_finish_loop()
 
 func _step(dt: float) -> void:
 	_time_left -= dt
@@ -87,12 +90,17 @@ func _step(dt: float) -> void:
 		"action": Input.is_action_pressed("interact"),
 	})
 
+	# Docking on a plate transfers the pilot into a fresh shell right away.
+	if Input.is_action_just_pressed("interact") and _on_plate(_player.global_position):
+		_finish_loop()
+		return
+
 	for i in _ghosts.size():
 		var frames: Array = _recordings[i]
 		if frames.is_empty():
 			continue
 		if _cursors[i] >= frames.size():
-			_cursors[i] = 0
+			_cursors[i] = frames.size() - 1  # abandoned shell freezes on its plate
 		var f: Dictionary = frames[_cursors[i]]
 		_ghosts[i].global_position = f["pos"]
 		_ghosts[i].set_meta("action", f["action"])
@@ -117,13 +125,21 @@ func _step(dt: float) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _finish_loop() -> void:
-	if _frames.size() > 2:
-		if _recordings.size() < MAX_GHOSTS:
-			_recordings.append(_frames.duplicate(true))
-		else:
-			_recordings[_loops % MAX_GHOSTS] = _frames.duplicate(true)
+	if _won:
+		return
+	if _frames.size() > 2 and _recordings.size() < MAX_GHOSTS:
+		_recordings.append(_frames.duplicate(true))
 	_loops += 1
 	_reset_room()
+
+func _on_skip_pressed() -> void:
+	_finish_loop()
+
+func _on_plate(pos: Vector3) -> bool:
+	for plate in _plates:
+		if pos.distance_to(plate.global_position) < 1.2:
+			return true
+	return false
 
 func _reset_room() -> void:
 	_time_left = LOOP_SECONDS
@@ -172,9 +188,9 @@ func _update_hud() -> void:
 		if p.has_meta("active") and p.get_meta("active"):
 			active += 1
 	if _won:
-		_label.text = "ESCAPED in %d loops - press R to replay" % _loops
+		_label.text = "ESCAPED in %d shells - press R to replay" % _loops
 	else:
-		_label.text = "PHANTOM LOOP  |  %04.1fs  |  loop %d  |  ghosts %d/%d  |  plates %d/%d\nWASD move - mouse look - E hold plate (ghosts copy E only) - Esc release\nOnce all plates are lit, the door stays open for this loop." % [_time_left, _loops, _ghosts.size(), MAX_GHOSTS, active, _plates.size()]
+		_label.text = "PHANTOM PROTOCOL  |  %04.1fs  |  shell %d/%d  |  parked shells %d/%d  |  plates %d/%d\nYou are the pilot. Drive a shell onto a plate, press E to dock, then pilot the next one.\nEnter or the button = transfer now - Esc releases the mouse to click." % [_time_left, _loops, MAX_GHOSTS + 1, _ghosts.size(), MAX_GHOSTS, active, _plates.size()]
 
 func _build_room() -> void:
 	var dark := Color(0.07, 0.08, 0.13)
@@ -265,17 +281,33 @@ func _build_hud() -> void:
 	_label.position = Vector2(24, 24)
 	_label.add_theme_font_size_override("font_size", 20)
 	canvas.add_child(_label)
+	_skip_button = Button.new()
+	_skip_button.text = "SKIP LOOP / TRANSFER BODY  [Enter]"
+	_skip_button.position = Vector2(24, 116)
+	_skip_button.size = Vector2(360, 40)
+	_skip_button.pressed.connect(_on_skip_pressed)
+	canvas.add_child(_skip_button)
 	add_child(canvas)
 ```
 
-### How it works
+### Lore and how it works
 
-- Every 60 Hz tick, the player's position and the state of `E` are recorded.
-- When the timer ends, the recording becomes a ghost that replays it forever.
-- A ghost only lights a plate if `E` was held at that moment in the recording.
-- You light a plate just by standing on it. You need 2 ghosts + yourself for 3 plates.
-- Once all plates are lit, the door stays open for the rest of the loop, so you can
-  actually walk through it. This is why the third loop used to look "empty".
+You are not the robot. You are the **pilot** jumping between robot shells in a
+derelict facility. A shell you abandon does not disappear: it stays behind,
+replays its last route and keeps holding whatever it was holding. That is the
+only way to be in several places at once.
+
+- Every 60 Hz tick, the current shell's position and the state of `E` are recorded.
+- Stand on a plate and press `E` to **dock** the shell. The pilot transfers into a
+  fresh shell at the entry point; the old one becomes a parked ghost on the plate.
+- The `SKIP LOOP / TRANSFER BODY` button (or `Enter`) transfers immediately
+  without docking. The timer expiry also forces a transfer.
+- A ghost replays its recording and then **freezes at its final position**, so it
+  keeps holding the plate forever instead of walking away.
+- You light a plate just by standing on it. You need 2 parked shells + yourself
+  for the 3 plates. Once all plates are lit, the door stays open for the loop.
+- Click the canvas to recapture the mouse, `Esc` to release it if you want to
+  click the button.
 
 ---
 
@@ -317,10 +349,27 @@ $project = "C:\Users\PC\Documents\project-1\phantom-loop"
 & $godot --path $project
 ```
 
-## Ideas to build next
+## Planned robot classes (future levels)
 
-- Replace the ghost sphere with a real body plus afterimage trail.
-- Add an `AudioStreamPlayer` whose pitch shifts on every loop.
+The lore is meant to grow into a class system. Each shell type should have one
+distinct ability, so later rooms ask you to combine them:
+
+| Shell | Ability | Puzzle use |
+|-------|---------|------------|
+| **Anchor** (current one) | Heavy, can lock a plate with `E` | Holds switches in place |
+| **Magnet** | Pulls nearby metal props toward itself | Bridges gaps, drags keys |
+| **Spark** | Short burst that stuns drones / lights terminals | Disables hazards, activates remote panels |
+| **Mimer** | Copies the last movement of the previously parked shell | Repeats a timed route without you |
+| **Phase** | Walks through one thin wall per level | Reaches isolated switch rooms |
+
+Implementation hint: add a `class_name` enum to the shell scene and store it in
+each recording alongside `pos` and `action`. The replay code then reads the
+class and calls the matching ability instead of only moving the ghost.
+
+## Other ideas to build next
+
+- Replace the ghost sphere with a real robot mesh plus afterimage trail.
+- Add an `AudioStreamPlayer` whose pitch shifts on every transfer.
 - Randomize plate positions with a seeded `RandomNumberGenerator`.
 - Add a second puzzle type: a beam blocked by a body.
 - Hook up co-op using the signaling server from the Climb Together project.

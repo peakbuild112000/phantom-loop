@@ -4,9 +4,9 @@
 **Repository:** <https://github.com/peakbuild112000/phantom-loop>  
 **Engine:** Godot 4.6.1 stable
 
-A time-loop escape room built for **PHANTOM**, the Hack Club hackathon. Every
-attempt is replayed by a ghost. Solve the rooms by cooperating with your own
-past selves.
+A time-loop escape room built for **PHANTOM**, the Hack Club hackathon. You are
+a pilot jumping between robot shells. Every shell you abandon stays behind and
+keeps holding its position, so you can cooperate with your own past bodies.
 
 ## Contents
 
@@ -35,27 +35,30 @@ Source code:
 
 ## How to play
 
-You have 30 seconds per loop. Stand on the three glowing plates at the same
-time to open the door.
+You are not the robot: you are the **pilot** of a series of shells in a derelict
+facility. Each shell has 30 seconds of power. Stand on the three glowing plates
+at the same time to open the door.
 
-* You activate a plate just by standing on it.
-* A ghost only activates a plate if you held `E` while standing on it during
-  that recording. Hold `E` on a plate, let the loop end, and your ghost will
-  keep holding it.
-* Once all plates are lit, the door stays open for the rest of the loop, so you
-  can walk through it.
-* The first puzzle needs two ghosts plus yourself. Later rooms add timed doors,
-  carried keys and beam blockers.
-
-The full design and the 50-hour roadmap are in [docs/PHANTOM_LOOP.md](docs/PHANTOM_LOOP.md).
+* Move a shell onto a plate and press `E` to **dock** it. The pilot transfers
+  into a fresh shell at the entry point, and the old shell stays on the plate.
+* `Enter` or the `SKIP LOOP / TRANSFER BODY` button transfers immediately
+  without docking. Letting the timer expire transfers you too.
+* A parked shell replays its last route and then **freezes**, so it keeps
+  holding the plate forever instead of walking away.
+* Once all plates are lit, the door stays open for the rest of the loop.
+* The first puzzle needs two parked shells plus yourself. Future rooms will add
+  different robot classes with their own abilities - see
+  [docs/PHANTOM_LOOP.md](docs/PHANTOM_LOOP.md).
 
 ## Controls
 
 | Input | Action |
 | --- | --- |
-| `W A S D` | Move |
+| `W A S D` | Move the current shell |
 | Mouse | Look (horizontal and vertical) |
-| `E` (hold) | Perform the action ghosts record |
+| `E` (on a plate) | Dock the shell and transfer to the next one |
+| `Enter` | Skip the timer / transfer immediately |
+| `SKIP LOOP / TRANSFER BODY` button | Same as `Enter` (press `Esc` first to click it) |
 | `Esc` | Release the mouse |
 | Click | Capture the mouse again |
 | `R` | Restart after escaping |

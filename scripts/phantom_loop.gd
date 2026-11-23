@@ -21,6 +21,7 @@ var _door_col: CollisionShape3D
 var _player: CharacterBody3D
 var _cam: Camera3D
 var _label: Label
+var _skip_button: Button
 var _loops := 1
 var _won := false
 var _door_latched := false
@@ -56,6 +57,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if event is InputEventKey and event.keycode == KEY_ENTER and event.pressed and not _won:
+		_finish_loop()
 
 func _step(dt: float) -> void:
 	_time_left -= dt
@@ -74,12 +77,17 @@ func _step(dt: float) -> void:
 		"action": Input.is_action_pressed("interact"),
 	})
 
+	# Docking on a plate transfers the pilot into a fresh shell right away.
+	if Input.is_action_just_pressed("interact") and _on_plate(_player.global_position):
+		_finish_loop()
+		return
+
 	for i in _ghosts.size():
 		var frames: Array = _recordings[i]
 		if frames.is_empty():
 			continue
 		if _cursors[i] >= frames.size():
-			_cursors[i] = 0
+			_cursors[i] = frames.size() - 1  # abandoned shell freezes on its plate
 		var f: Dictionary = frames[_cursors[i]]
 		_ghosts[i].global_position = f["pos"]
 		_ghosts[i].set_meta("action", f["action"])
@@ -104,13 +112,21 @@ func _step(dt: float) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _finish_loop() -> void:
-	if _frames.size() > 2:
-		if _recordings.size() < MAX_GHOSTS:
-			_recordings.append(_frames.duplicate(true))
-		else:
-			_recordings[_loops % MAX_GHOSTS] = _frames.duplicate(true)
+	if _won:
+		return
+	if _frames.size() > 2 and _recordings.size() < MAX_GHOSTS:
+		_recordings.append(_frames.duplicate(true))
 	_loops += 1
 	_reset_room()
+
+func _on_skip_pressed() -> void:
+	_finish_loop()
+
+func _on_plate(pos: Vector3) -> bool:
+	for plate in _plates:
+		if pos.distance_to(plate.global_position) < 1.2:
+			return true
+	return false
 
 func _reset_room() -> void:
 	_time_left = LOOP_SECONDS
@@ -159,9 +175,9 @@ func _update_hud() -> void:
 		if p.has_meta("active") and p.get_meta("active"):
 			active += 1
 	if _won:
-		_label.text = "ESCAPED in %d loops - press R to replay" % _loops
+		_label.text = "ESCAPED in %d shells - press R to replay" % _loops
 	else:
-		_label.text = "PHANTOM LOOP  |  %04.1fs  |  loop %d  |  ghosts %d/%d  |  plates %d/%d\nWASD move - mouse look - E hold plate (ghosts copy E only) - Esc release\nOnce all plates are lit, the door stays open for this loop." % [_time_left, _loops, _ghosts.size(), MAX_GHOSTS, active, _plates.size()]
+		_label.text = "PHANTOM PROTOCOL  |  %04.1fs  |  shell %d/%d  |  parked shells %d/%d  |  plates %d/%d\nYou are the pilot. Drive a shell onto a plate, press E to dock, then pilot the next one.\nEnter or the button = transfer now - Esc releases the mouse to click." % [_time_left, _loops, MAX_GHOSTS + 1, _ghosts.size(), MAX_GHOSTS, active, _plates.size()]
 
 func _build_room() -> void:
 	var dark := Color(0.07, 0.08, 0.13)
@@ -252,4 +268,10 @@ func _build_hud() -> void:
 	_label.position = Vector2(24, 24)
 	_label.add_theme_font_size_override("font_size", 20)
 	canvas.add_child(_label)
+	_skip_button = Button.new()
+	_skip_button.text = "SKIP LOOP / TRANSFER BODY  [Enter]"
+	_skip_button.position = Vector2(24, 116)
+	_skip_button.size = Vector2(360, 40)
+	_skip_button.pressed.connect(_on_skip_pressed)
+	canvas.add_child(_skip_button)
 	add_child(canvas)
