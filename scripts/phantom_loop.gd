@@ -160,6 +160,7 @@ func _reset_room() -> void:
 	_frames.clear()
 	_door_latched = false
 	_pitch = 0.0
+	_dragging = false
 	_cam.rotation.x = 0.0
 	_player.rotation.y = 0.0  # always face the room, never the back wall
 	_player.global_position = Vector3(0.0, 1.0, 7.0)
