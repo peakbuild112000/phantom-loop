@@ -55,11 +55,11 @@ at the same time to open the door.
 | Input | Action |
 | --- | --- |
 | `W A S D` | Move the current shell |
-| Mouse | Look (horizontal and vertical) |
+| Mouse | Look (drag with left button on Web, captured on desktop) |
 | `E` (on a plate) | Dock the shell and transfer to the next one |
 | `Enter` | Skip the timer / transfer immediately |
-| `SKIP LOOP / TRANSFER BODY` button | Same as `Enter` (press `Esc` first to click it) |
-| `Esc` | Release the mouse |
+| `SKIP LOOP / TRANSFER BODY` button | Same as `Enter` (always clickable on Web) |
+| `Esc` | Release the mouse on desktop |
 | Click | Capture the mouse again |
 | `R` | Restart after escaping |
 

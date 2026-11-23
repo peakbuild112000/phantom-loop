@@ -39,14 +39,18 @@ var _loops := 1
 var _won := false
 var _door_latched := false
 var _pitch := 0.0
+var _dragging := false
 
 func _ready() -> void:
 	_build_room()
 	_build_player()
 	_build_hud()
 	_reset_room()
-	# Web browsers only allow pointer lock after a user gesture.
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# On Web we use click-drag look: no pointer lock, so the skip button stays clickable.
+	if OS.has_feature("web"):
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	else:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func _physics_process(delta: float) -> void:
 	if _won:
@@ -62,14 +66,21 @@ func _physics_process(delta: float) -> void:
 	_update_hud()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+	var look := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	if OS.has_feature("web"):
+		look = _dragging
+	if event is InputEventMouseMotion and look:
 		_player.rotate_y(-event.relative.x * 0.0025)
 		_pitch = clampf(_pitch - event.relative.y * 0.0025, -1.2, 1.2)
 		_cam.rotation.x = _pitch
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		_dragging = event.pressed
+		if OS.has_feature("web"):
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		elif event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed:
+		_dragging = false
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if event is InputEventKey and event.keycode == KEY_ENTER and event.pressed and not _won:
 		_finish_loop()
@@ -105,6 +116,7 @@ func _step(dt: float) -> void:
 		var f: Dictionary = frames[_cursors[i]]
 		_ghosts[i].global_position = f["pos"]
 		_ghosts[i].set_meta("action", f["action"])
+		_ghosts[i].visible = _ghosts[i].global_position.distance_to(_player.global_position) > 1.4
 		_cursors[i] += 1
 
 	var all := true
@@ -123,6 +135,7 @@ func _step(dt: float) -> void:
 	_open_door(_door_latched)
 	if _door_latched and _player.global_position.z < -8.2:
 		_won = true
+		_dragging = false
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _finish_loop() -> void:
@@ -157,11 +170,17 @@ func _reset_room() -> void:
 	_ghosts.clear()
 	_cursors.clear()
 	for rec in _recordings:
-		_ghosts.append(_make_ghost())
+		var g := _make_ghost()
+		if not rec.is_empty():
+			g.global_position = rec[0]["pos"]
+		_ghosts.append(g)
 		_cursors.append(0)
 
 func _make_ghost() -> CharacterBody3D:
 	var g := CharacterBody3D.new()
+	# Layer 2, mask 0: plates detect ghosts, but ghosts never push the player.
+	g.collision_layer = 2
+	g.collision_mask = 0
 	var shape := SphereShape3D.new()
 	shape.radius = 0.45
 	var col := CollisionShape3D.new()
@@ -241,6 +260,7 @@ func _box(pos: Vector3, size: Vector3, color: Color) -> StaticBody3D:
 
 func _make_plate(pos: Vector3) -> Area3D:
 	var area := Area3D.new()
+	area.collision_mask = 3  # see player layer 1 and parked shells on layer 2
 	var mesh := MeshInstance3D.new()
 	var cyl := CylinderMesh.new()
 	cyl.top_radius = 0.8
@@ -264,6 +284,8 @@ func _make_plate(pos: Vector3) -> Area3D:
 
 func _build_player() -> void:
 	_player = CharacterBody3D.new()
+	_player.collision_layer = 1
+	_player.collision_mask = 1
 	var col := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = 0.4
@@ -307,8 +329,11 @@ only way to be in several places at once.
   keeps holding the plate forever instead of walking away.
 - You light a plate just by standing on it. You need 2 parked shells + yourself
   for the 3 plates. Once all plates are lit, the door stays open for the loop.
-- Click the canvas to recapture the mouse, `Esc` to release it if you want to
-  click the button.
+- On Web, hold the **left mouse button and drag** to look around (no pointer
+  lock, so the skip button stays clickable). On desktop the mouse is captured;
+  `Esc` releases it.
+- Parked shells live on collision layer 2 with mask 0: plates still detect them,
+  but they can never push the player out of the room.
 
 ---
 
