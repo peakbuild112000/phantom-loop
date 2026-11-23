@@ -8,7 +8,7 @@
 A time-loop escape room with a robot-shell lore. You are a pilot transferring
 between bodies in a derelict facility. Every abandoned shell replays its last
 route and then freezes, so puzzles ask you to cooperate with your own past
-bodies instead of waiting for a timer.
+bodies. Four sectors introduce four robot classes with distinct abilities.
 
 * **Target time:** 50 hours (PHANTOM goal: 50 fragments-hours).
 * **Engine:** Godot 4.6.1 stable, GL Compatibility renderer.
@@ -17,94 +17,99 @@ bodies instead of waiting for a timer.
 
 ## Loop
 
-1. A fresh shell boots at the entry point with 30 seconds of power.
-2. Drive it onto a plate and press `E` to dock, or press `Enter` / the skip
-   button to transfer early. Timer expiry forces a transfer too.
+1. A fresh shell boots at the entry point with 30 seconds of power, facing the
+   room (never a wall).
+2. Drive it where you need it, then press `E` / `Enter` or the skip button to
+   transfer. Timer expiry forces a transfer too.
 3. The abandoned shell becomes a ghost that replays its route and freezes at
    the end, keeping its plate held.
 4. Stack up to **3** parked shells (`MAX_GHOSTS`) until every condition is true.
-   Beyond that, transfers still reset the timer but create no new ghost.
-5. Walk the current shell through the door and move to the next room.
+   Further transfers reset the timer but add no ghost.
+5. Walk the current shell through the door, press `Enter`, and start the next
+   sector with a fresh set of shells.
 
 ## Simulation rules
 
 * Fixed 60 Hz tick with an accumulator and a maximum of 5 substeps per frame.
-* Snapshot = `{ position: Vector3, action: bool }` per tick.
+* Snapshot = `{ position: Vector3, class: int }` per tick - no input or action
+  flag is needed any more, because plates are automatic.
 * Replay by snapshot instead of input: deterministic on WebGL, with no reliance
-  on physics for playback.
-* Ghosts are kinematic `CharacterBody3D` nodes on layer 2 with mask 0: plates
-  detect them, but they never push the player. When their cursor reaches the end
-  of the recording it clamps to the last frame, so they stay parked on their plate.
-* Plate activation uses a direct XZ distance check (`_touches_plate`) instead of
-  `Area3D.get_overlapping_bodies()`. The tall trigger shape was also increased to
-  2 m. Overlaps were one physics frame late / too flat, so held plates sometimes
-  never lit up. The check is now identical on desktop and Web.
-* Docking (`E` on a plate), `Enter`, the skip button and timer expiry all call
-  the same `finish_loop()` transfer path.
-* Room reset: original positions, timer, plate state, door collision, and player
-  yaw forced to 0 so the new shell always faces the room instead of a wall.
-* Once all plates are active, the door is **latched open** until the next loop.
-  Without this, the player had to leave the last plate to reach the door, which
-  closed it again and made the third loop look empty.
+  on physics for playback. When the cursor reaches the end it clamps to the last
+  frame, so the shell parks where it stopped.
+* Ghosts are kinematic `CharacterBody3D` nodes on layer 2 with mask 0: they can
+  never push the player. Plates are evaluated with a direct XZ distance check,
+  so there is no physics-frame lag or missed trigger volume.
+* Plate rules: `ANY` accepts every class; a class id accepts only that class;
+  `KEY` accepts only the gold core when it is close enough.
+* Every transfer path (`E`, `Enter`, button, timer) calls the same `_finish_loop()`.
+* Room reset: original positions, timer, plate colour, key position, door
+  collision, player yaw and drag state.
+* Once all plates are active, the door is **latched open** until the next
+  transfer. Without this, the player had to leave the last plate to reach the
+  door, which closed it again and made the third loop look empty.
 * Mouse look: yaw rotates the player, pitch rotates the camera, clamped to
-  +/-1.2 rad so the view cannot flip.
+  +/-1.2 rad so the view cannot flip. On Web, click-drag replaces pointer lock
+  so the HUD buttons stay clickable.
 
-## MVP rooms
+## Sectors
 
 | # | Name | Mechanic | Ghosts needed |
 |---|------|----------|---------------|
-| 1 | **Antechamber** | 3 plates active at once | 2 |
-| 2 | **Corridor** | plate + door that closes after 2 s | 2 |
-| 3 | **Balance** | carry a key onto a plate while another holds a lever | 3 |
-| 4 | **Exit** | combination of the previous three | 3+ |
+| 1 | **Antechamber** | 3 automatic plates | 2 |
+| 2 | **Heavy Foundry** | Anchor-only plate behind a wall | 2 |
+| 3 | **Magnet Bay** | Pull the gold core onto a dark pad | 2 + magnet |
+| 4 | **Phase Vault** | Phase wall + Spark remote pad | 2 + phase/spark |
 
-## Architecture (target)
+Sector data lives in `scripts/level_data.gd`; adding a sector is one dictionary.
+
+## Robot classes
+
+Selectable at any time with `1`-`4` or the HUD buttons. The choice is stored in
+the snapshot, so a parked shell keeps its class and its ability keeps working.
+
+| Key | Class | Ability | Puzzle use |
+|-----|-------|---------|------------|
+| `1` | **Anchor** | Heavy frame | Only class that can press red heavy plates |
+| `2` | **Magnet** | Pulls the gold core within 6 m | Moves the core onto a plate from a distance |
+| `3` | **Spark** | Lights remote pads within 3.6 m | Activates pads you cannot stand on |
+| `4` | **Phase** | Ignores phase walls (collision mask 1) | Reaches isolated rooms behind thin walls |
+
+Future class ideas: **Drone** (flies over gaps), **Echo** (copies the previous
+shell's route) and **Weld** (temporarily bridges a gap).
+
+## Architecture
 
 ```
 scenes/
-  main.tscn          # root, phantom_loop.gd (prototype)
-  rooms/room_*.tscn  # future rooms
+  main.tscn            # root, phantom_loop.gd
 scripts/
-  phantom_loop.gd    # loop, recording, replay, reset
-  ghost.gd           # spectral rendering, afterimages
-  puzzle/*.gd        # plates, doors, levers, beams
+  phantom_loop.gd      # sectors, loop, ghosts, plates, HUD
+  level_data.gd        # 4 sector dictionaries
+  robot_shell.gd       # procedural 3D model + class colours
 shaders/
-  ghost.gdshader
+  ghost.gdshader       # translucent spectral material
 tests/
-  loop_test.gd       # verifies one recording = one replayed ghost
+  smoke_test.gd        # headless checks for plates, ghosts, classes
 ```
 
-## Planned robot classes (future levels)
-
-The lore is meant to grow into a class system. Every shell type gets one
-distinct ability so later rooms require combining them.
-
-| Shell | Ability | Puzzle use |
-|-------|---------|------------|
-| **Anchor** (current one) | Heavy, can dock on a plate with `E` | Holds switches in place |
-| **Magnet** | Pulls nearby metal props toward itself | Bridges gaps, drags keys |
-| **Spark** | Short burst that stuns drones / lights terminals | Disables hazards, remote panels |
-| **Mimer** | Copies the last route of the previously parked shell | Repeats a timed path without you |
-| **Phase** | Walks through one thin wall per level | Reaches isolated switch rooms |
-
-Implementation hint: add a `ShellClass` enum to the recording snapshot next to
-`pos` and `action`; replay code then dispatches to the matching ability instead
-of only moving the ghost.
+All robot, plate, door and key models are generated from meshes in code, so the
+project has no external asset dependency.
 
 ## 50-hour plan
 
 | Block | Hours | Content |
 |-------|-------|---------|
 | Loop + ghost prototype | 8 | snapshot, replay, reset, HUD |
-| Rooms 1-4 | 12 | mechanics, level design, visual cues |
+| Sectors 1-4 + classes | 12 | mechanics, level design, 3D models |
 | Polish | 10 | shaders, audio, feedback, animation |
 | Web co-op | 12 | signaling, ghost sync, lobby |
 | Tests + submission | 8 | Godot tests, Web export, README, demo video |
 
 ## Stretch goals
 
+- Animated walk cycle for the shells instead of static meshes.
 - Seeded room generator with shareable seeds.
-- "Fewest loops" leaderboard stored in `user://`.
-- Corrupted ghosts: one ghost in N replays a slightly different action.
-- Soundtrack that distorts with every loop (pitch + reverb).
+- "Fewest shells" leaderboard stored in `user://`.
+- Corrupted ghosts: one ghost in N replays a slightly different route.
+- Soundtrack that distorts with every transfer (pitch + reverb).
 - Co-op mode: every player sees everyone else's ghosts.

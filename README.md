@@ -5,13 +5,16 @@
 **Engine:** Godot 4.6.1 stable
 
 A time-loop escape room built for **PHANTOM**, the Hack Club hackathon. You are
-a pilot jumping between robot shells. Every shell you abandon stays behind and
-keeps holding its position, so you can cooperate with your own past bodies.
+a pilot jumping between 3D robot shells. Every shell you abandon stays behind
+and keeps holding its position, so you can cooperate with your own past bodies.
+Four sectors, four robot classes, each with its own ability.
 
 ## Contents
 
 - [Demo](#demo)
 - [How to play](#how-to-play)
+- [Robot classes](#robot-classes)
+- [Sectors](#sectors)
 - [Controls](#controls)
 - [Run from source](#run-from-source)
 - [Web export](#web-export)
@@ -27,7 +30,8 @@ Play it in the browser:
 <https://peakbuild112000.github.io/phantom-loop/>
 
 Recommended browser: a recent Chrome, Edge, Firefox or Safari with WebGL2
-enabled. Click the canvas once if mouse look does not respond.
+enabled. On Web, **hold the left mouse button and drag** to look around; this
+keeps the buttons clickable.
 
 Source code:
 
@@ -35,23 +39,43 @@ Source code:
 
 ## How to play
 
-You are not the robot: you are the **pilot** of a series of shells in a derelict
-facility. Each shell has 30 seconds of power. Stand on the three glowing plates
-at the same time to open the door.
+You are not the robot: you are the **pilot** of a fleet of shells in a derelict
+facility. Each shell has 30 seconds of power. Stand on all the glowing plates at
+the same time to open the door.
 
-* Move a shell onto a plate and press `E` to **dock** it. The pilot transfers
-  into a fresh shell at the entry point, and the old shell stays on the plate.
-* `Enter` or the `SKIP LOOP / TRANSFER BODY` button transfers immediately
-  without docking. Letting the timer expire transfers you too.
+* Plates are **automatic**: any shell standing on one lights it. No button needed.
+* `E`, `Enter` or the `SKIP / TRANSFER BODY` button transfers you into a fresh
+  shell at the entry point. Timer expiry transfers you too.
 * A parked shell replays its last route and then **freezes**, so it keeps
-  holding the plate forever instead of walking away.
-* Once all plates are lit, the door stays open for the rest of the loop.
-* Only **3 shells can be parked** at once. When the limit is reached the HUD
-  shows `NO SHELLS LEFT - press R to restart`. The first puzzle needs two parked
-  shells plus yourself.
-* Every new shell spawns facing the room, never a wall.
-* Future rooms will add different robot classes with their own abilities - see
-  [docs/PHANTOM_LOOP.md](docs/PHANTOM_LOOP.md).
+  holding its plate forever instead of walking away.
+* Only **3 shells can be parked** per sector. Beyond that, transfers still reset
+  the timer but add no ghost, and the HUD shows `NO SHELLS LEFT - press R`.
+* Every new shell spawns facing the room. Once all plates are lit, the door stays
+  open so you can walk through it. Reaching it clears the sector: press `Enter`
+  for the next one.
+
+## Robot classes
+
+Press `1`-`4` or click a class button at any time to change the shell you are
+piloting. Parked shells keep the class they had when transferred.
+
+| Key | Class | Ability |
+| --- | --- | --- |
+| `1` | **Anchor** | Heavy frame: the only class that can hold red heavy plates |
+| `2` | **Magnet** | Pulls the gold core within 6 m onto its target pad |
+| `3` | **Spark** | Lights yellow remote pads from up to 3.6 m away |
+| `4` | **Phase** | Walks through thin purple phase walls |
+
+## Sectors
+
+| # | Name | Mechanic |
+|---|------|----------|
+| 1 | **Antechamber** | Automatic plates, parking basics |
+| 2 | **Heavy Foundry** | Anchor-only plate behind a wall |
+| 3 | **Magnet Bay** | Pull the gold core onto a dark pad |
+| 4 | **Phase Vault** | Phase wall plus a Spark remote pad |
+
+Full design notes: [docs/PHANTOM_LOOP.md](docs/PHANTOM_LOOP.md).
 
 ## Controls
 
@@ -59,12 +83,13 @@ at the same time to open the door.
 | --- | --- |
 | `W A S D` | Move the current shell |
 | Mouse | Look (drag with left button on Web, captured on desktop) |
-| `E` (on a plate) | Dock the shell and transfer to the next one |
-| `Enter` | Skip the timer / transfer immediately |
-| `SKIP LOOP / TRANSFER BODY` button | Same as `Enter` (always clickable on Web) |
+| `1` - `4` | Select Anchor / Magnet / Spark / Phase |
+| `E` | Transfer to the next shell |
+| `Enter` | Transfer, or advance after clearing a sector |
+| Class buttons | Same as `1`-`4` (always clickable on Web) |
+| `SKIP / TRANSFER BODY` button | Same as `Enter` |
 | `Esc` | Release the mouse on desktop |
-| Click | Capture the mouse again |
-| `R` | Restart after escaping |
+| `R` | Restart the whole run at any time |
 
 ## Run from source
 
@@ -112,11 +137,15 @@ phantom-loop/
 │   ├── COPY_ME.md         # exact copy of the game source
 │   └── PHANTOM_LOOP.md    # design doc + 50 h roadmap
 ├── scripts/
-│   └── phantom_loop.gd    # loop recorder, ghost replay, puzzles, HUD
+│   ├── phantom_loop.gd    # controller, ghosts, plates, HUD, sector flow
+│   ├── level_data.gd      # 4 sector definitions
+│   └── robot_shell.gd     # procedural 3D robot + class colours
 ├── shaders/
 │   └── ghost.gdshader     # spectral ghost material
 ├── scenes/
 │   └── main.tscn          # main scene
+├── tests/
+│   └── smoke_test.gd      # headless checks for plates, ghosts, classes
 └── .github/workflows/     # Web export + Pages deployment
 ```
 
