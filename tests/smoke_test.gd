@@ -82,4 +82,11 @@ func _init() -> void:
 	print("DOOR_CROSS_WON=", main.get("_won"), " TRANSITION=", main.get("_transition") > 0.0)
 	main.call("_process", 0.5)
 	print("AUTO_NEXT_LEVEL=", main.get("_level_idx") == 1)
+	# 9. The mouse stays locked across the door transition (desktop) or keeps
+	#    drag-look ready (web). Getting here with visible mode was the bug.
+	var headless: bool = DisplayServer.get_name() == "headless"
+	var mode_ok: bool = OS.has_feature("web") or headless or Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	# The old bug released the pointer inside _win(); that must no longer happen.
+	var not_released: bool = not bool(main.get("_mouse_released_by_user"))
+	print("MOUSE_AFTER_LEVEL=", mode_ok, " NOT_RELEASED_ON_WIN=", not_released, " HEADLESS=", headless)
 	quit()

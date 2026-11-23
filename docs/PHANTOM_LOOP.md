@@ -50,7 +50,9 @@ bodies. Four sectors introduce four robot classes with distinct abilities.
   a 0.45 s transition that loads the next sector automatically.
 * Mouse look: yaw rotates the player, pitch rotates the camera, clamped to
   +/-1.2 rad so the view cannot flip. On Web, click-drag replaces pointer lock
-  so the HUD buttons stay clickable.
+  so the HUD buttons stay clickable. `_apply_mouse_mode()` runs on boot, on every
+  room reset and after every level load: the pointer is never released by a door
+  crossing, and Web drag-look is restored from the real button state.
 
 ## Sectors
 

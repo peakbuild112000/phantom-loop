@@ -93,8 +93,11 @@ Full design notes: [docs/PHANTOM_LOOP.md](docs/PHANTOM_LOOP.md).
 | `Enter` | Transfer to the next shell |
 | Class buttons | Same as `1`-`4` (always clickable on Web) |
 | `SKIP / TRANSFER BODY` button | Same as `Enter` |
-| `Esc` | Release the mouse on desktop |
+| `Esc` | Release the mouse on desktop (next click captures it again) |
 | `R` | Restart the whole run at any time |
+
+The mouse stays locked across transfers and sector changes. On Web, drag look
+stays active after a door transition too, so you do not have to click again.
 
 ## Run from source
 

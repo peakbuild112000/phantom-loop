@@ -318,16 +318,29 @@ var _door_y := 1.5
 var _door_target_y := 1.5
 var _flash: ColorRect
 var _flash_alpha := 0.0
+var _mouse_released_by_user := false
 
 func _ready() -> void:
 	_levels = LevelData.all()
 	_build_player()
 	_build_hud()
 	_load_level(0)
+	_apply_mouse_mode()
+
+func _apply_mouse_mode() -> void:
+	# Called on boot AND after every level load / transfer: the mouse must never
+	# silently stay unlocked when a new sector starts.
 	if OS.has_feature("web"):
+		# Web has no pointer lock - drag look keeps HUD buttons clickable.
+		# Keep dragging if the button is still held during the transition.
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_dragging = Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	elif _mouse_released_by_user:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_dragging = false
 	else:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		_dragging = false
 
 func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("restart"):
@@ -406,8 +419,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				if not _won and not _game_over:
 					_finish_loop()
 			KEY_ESCAPE:
-				_dragging = false
-				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+				_mouse_released_by_user = true
+				_apply_mouse_mode()
 	var look := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 	if OS.has_feature("web"):
 		look = _dragging
@@ -417,6 +430,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_cam.rotation.x = _pitch
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		_dragging = event.pressed
+		if event.pressed:
+			_mouse_released_by_user = false
 		if OS.has_feature("web"):
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		elif event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
@@ -533,7 +548,7 @@ func _reset_room() -> void:
 	_frames.clear()
 	_door_latched = false
 	_pitch = 0.0
-	_dragging = false
+	_apply_mouse_mode()
 	_cam.rotation.x = 0.0
 	_player.rotation.y = float(level.get("yaw", 0.0))
 	_player.global_position = level["spawn"]
@@ -588,13 +603,13 @@ func _select_class(cls: int) -> void:
 
 func _win() -> void:
 	_won = true
-	_dragging = false
 	_door_col.disabled = false
 	_door_target_y = 1.5
 	_flash.color = Color(0.6, 1.0, 0.8, 0.55)
 	_flash_alpha = 0.55
 	_transition = 0.45
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# Deliberately keep the current mouse mode here: releasing on the door
+	# crossing was what made the view unlock on every sector change.
 	_update_hud()
 
 func _advance_level() -> void:
@@ -926,6 +941,15 @@ Everything is procedural, with no animation resources:
 | 2 | Heavy Foundry | Anchor-only plate |
 | 3 | Magnet Bay | Pull the core onto a plate |
 | 4 | Phase Vault | Phase wall + Spark remote pad |
+
+### Mouse handling
+
+`_apply_mouse_mode()` is called on boot, on every room reset and after every
+level load. On desktop it keeps the pointer captured, so crossing a door never
+releases it. Only `Esc` unlocks the mouse, and the next left click captures it
+again. On Web there is no pointer lock: `_apply_mouse_mode()` restores the drag
+state from the actual left-button state, so looking keeps working across a
+sector transition instead of needing a fresh click.
 
 ## Verification
 
