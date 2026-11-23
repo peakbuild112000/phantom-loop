@@ -17,11 +17,24 @@ concurrency:
 jobs:
   export:
     runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check game source
+        id: check
+        run: |
+          if [ -f scenes/main.tscn ] && [ -f scripts/phantom_loop.gd ] && [ -f shaders/ghost.gdshader ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Code du jeu pas encore copié (voir docs/COPY_ME.md). Export ignoré."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download Godot 4.6.1 stable
+        if: steps.check.outputs.ready == 'true'
         run: |
           curl -L --fail --retry 3 -o godot.zip \
             https://github.com/godotengine/godot/releases/download/4.6.1-stable/Godot_v4.6.1-stable_linux.x86_64.zip
@@ -29,6 +42,7 @@ jobs:
           chmod +x godot/Godot_v4.6.1-stable_linux.x86_64
 
       - name: Install export templates
+        if: steps.check.outputs.ready == 'true'
         run: |
           curl -L --fail --retry 3 -o templates.tpz \
             https://github.com/godotengine/godot/releases/download/4.6.1-stable/Godot_v4.6.1-stable_export_templates.tpz
@@ -38,18 +52,21 @@ jobs:
             "$HOME/.local/share/godot/export_templates/4.6.1.stable/"
 
       - name: Export Web
+        if: steps.check.outputs.ready == 'true'
         run: |
           mkdir -p build/web
           ./godot/Godot_v4.6.1-stable_linux.x86_64 \
             --headless --path . --export-release "Web" build/web/index.html
 
       - name: Upload Pages artifact
+        if: steps.check.outputs.ready == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: build/web
 
   deploy:
     needs: export
+    if: needs.export.outputs.ready == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
