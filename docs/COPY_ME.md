@@ -71,7 +71,7 @@ func _step(dt: float) -> void:
 		_finish_loop()
 		return
 
-	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	var input := Input.get_vector("move_left", "move_right", "move_back", "move_forward")
 	var local := Vector3(input.x, 0.0, -input.y)
 	var dir := (_player.global_transform.basis * local).normalized()
 	_player.velocity.x = dir.x * SPEED
