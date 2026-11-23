@@ -100,6 +100,10 @@ the snapshot, so a parked shell keeps its class and its ability keeps working.
 | `3` | **Spark** | Lights remote pads within 3.6 m | Activates pads you cannot stand on |
 | `4` | **Phase** | Ignores phase walls (collision mask 1) | Reaches isolated rooms behind thin walls |
 
+Phase walls are on collision layer 3 (bit value `4`). Passing `3` as a layer
+value would put them on layers 1 and 2, so normal shells would still hit them;
+the generator now passes `4`.
+
 Future class ideas: **Drone** (flies over gaps), **Echo** (copies the previous
 shell's route) and **Weld** (temporarily bridges a gap).
 

@@ -140,5 +140,27 @@ func _init() -> void:
 	main.call("_restart_level")
 	print("MENU_CLOSED=", closed_menu, " R_KEEPS_LEVEL=", main.get("_level_idx") == 5)
 	print("AUDIO_READY=", (main.get("_audio") as Dictionary).size(), " MENU_READY=", main.get("_menu") != null)
+
+	# 15. PHASE (mask 1) walks through layer-3 walls; other classes (mask 5) do not.
+	#     Real physics frames are required here: move_and_slide() outside the
+	#     physics tick has no stepped space to collide against.
+	main.call("_load_level", 3)
+	main.call("_select_class", 3)
+	player.global_position = Vector3(0.0, 0.8, -2.5)
+	player.rotation.y = 0.0
+	Input.action_press("move_forward")
+	for i in range(70):
+		await physics_frame
+	Input.action_release("move_forward")
+	var phase_z: float = player.global_position.z
+	main.call("_load_level", 3)
+	main.call("_select_class", 0)
+	player.global_position = Vector3(0.0, 0.8, -2.5)
+	player.rotation.y = 0.0
+	Input.action_press("move_forward")
+	for i in range(70):
+		await physics_frame
+	Input.action_release("move_forward")
+	print("PHASE_PASSES=", phase_z < -5.0, " ANCHOR_BLOCKED=", player.global_position.z > -3.6, " PHASE_Z=", phase_z, " NORMAL_Z=", player.global_position.z)
 	main.call("_shutdown_audio")
 	quit()

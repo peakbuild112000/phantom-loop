@@ -470,7 +470,9 @@ func _load_level(idx: int) -> void:
 			wall_color = Color.html(String(w["color"]))
 		if w.get("phase", false):
 			wall_color = Color(0.55, 0.30, 0.90)
-		_box(w["pos"], w["size"], wall_color, 3 if w.get("phase", false) else 1)
+		# Phase walls live on layer 4 (bit value 4, not "layer number 3").
+		# Normal shells mask 1+4 and hit them; PHASE masks only 1 and passes.
+		_box(w["pos"], w["size"], wall_color, 4 if w.get("phase", false) else 1)
 	for m in level.get("movers", []):
 		var body := _box(m["pos"], m["size"], Color(0.90, 0.22, 0.26), 1)
 		_movers.append({
