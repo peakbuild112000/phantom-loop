@@ -148,8 +148,8 @@ func _make_ghost() -> CharacterBody3D:
 	mat.shader = load("res://shaders/ghost.gdshader") as Shader
 	mesh.material_override = mat
 	g.add_child(mesh)
-	g.global_position = Vector3(0.0, 1.0, 7.0)
 	add_child(g)
+	g.global_position = Vector3(0.0, 1.0, 7.0)
 	return g
 
 func _open_door(open: bool) -> void:
@@ -208,8 +208,8 @@ func _box(pos: Vector3, size: Vector3, color: Color) -> StaticBody3D:
 	shape.size = size
 	col.shape = shape
 	body.add_child(col)
-	body.global_position = pos
 	add_child(body)
+	body.global_position = pos
 	return body
 
 func _make_plate(pos: Vector3) -> Area3D:
@@ -230,8 +230,8 @@ func _make_plate(pos: Vector3) -> Area3D:
 	shape.height = 0.5
 	col.shape = shape
 	area.add_child(col)
-	area.global_position = pos
 	add_child(area)
+	area.global_position = pos
 	_plates.append(area)
 	return area
 
@@ -246,8 +246,8 @@ func _build_player() -> void:
 	var cam := Camera3D.new()
 	cam.position = Vector3(0, 0.7, 0)
 	_player.add_child(cam)
-	_player.global_position = Vector3(0, 1, 7)
 	add_child(_player)
+	_player.global_position = Vector3(0, 1, 7)
 
 func _build_hud() -> void:
 	var canvas := CanvasLayer.new()
