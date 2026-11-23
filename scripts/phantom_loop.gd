@@ -1,8 +1,8 @@
 extends Node3D
 
-## PHANTOM LOOP â€” prototype central (Godot 4.6)
-## Ã€ copier dans res://scripts/phantom_loop.gd
-## Ã€ attacher au nÅ“ud racine de res://scenes/main.tscn
+## PHANTOM LOOP - central prototype (Godot 4.6)
+## Copy to res://scripts/phantom_loop.gd
+## Attach to the root Node3D of res://scenes/main.tscn
 
 const LOOP_SECONDS := 30.0
 const TICK := 1.0 / 60.0
@@ -19,9 +19,12 @@ var _plates: Array[Area3D] = []
 var _door: StaticBody3D
 var _door_col: CollisionShape3D
 var _player: CharacterBody3D
+var _cam: Camera3D
 var _label: Label
 var _loops := 1
 var _won := false
+var _door_latched := false
+var _pitch := 0.0
 
 func _ready() -> void:
 	_build_room()
@@ -46,6 +49,8 @@ func _physics_process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		_player.rotate_y(-event.relative.x * 0.0025)
+		_pitch = clampf(_pitch - event.relative.y * 0.0025, -1.2, 1.2)
+		_cam.rotation.x = _pitch
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -91,8 +96,10 @@ func _step(dt: float) -> void:
 		plate.set_meta("active", active)
 		if not active:
 			all = false
-	_open_door(all)
-	if all and _player.global_position.z < -8.2:
+	if all:
+		_door_latched = true
+	_open_door(_door_latched)
+	if _door_latched and _player.global_position.z < -8.2:
 		_won = true
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -109,6 +116,9 @@ func _reset_room() -> void:
 	_time_left = LOOP_SECONDS
 	_acc = 0.0
 	_frames.clear()
+	_door_latched = false
+	_pitch = 0.0
+	_cam.rotation.x = 0.0
 	_player.global_position = Vector3(0.0, 1.0, 7.0)
 	_player.velocity = Vector3.ZERO
 	_open_door(false)
@@ -149,9 +159,9 @@ func _update_hud() -> void:
 		if p.has_meta("active") and p.get_meta("active"):
 			active += 1
 	if _won:
-		_label.text = "ESCAPED in %d loops â€” press R to replay" % _loops
+		_label.text = "ESCAPED in %d loops - press R to replay" % _loops
 	else:
-		_label.text = "PHANTOM LOOP  |  %04.1fs  |  loop %d  |  ghosts %d/%d  |  plates %d/%d\nWASD move Â· mouse look Â· E hold plate Â· Esc release" % [_time_left, _loops, _ghosts.size(), MAX_GHOSTS, active, _plates.size()]
+		_label.text = "PHANTOM LOOP  |  %04.1fs  |  loop %d  |  ghosts %d/%d  |  plates %d/%d\nWASD move - mouse look - E hold plate (ghosts copy E only) - Esc release\nOnce all plates are lit, the door stays open for this loop." % [_time_left, _loops, _ghosts.size(), MAX_GHOSTS, active, _plates.size()]
 
 func _build_room() -> void:
 	var dark := Color(0.07, 0.08, 0.13)
@@ -230,9 +240,9 @@ func _build_player() -> void:
 	capsule.height = 1.6
 	col.shape = capsule
 	_player.add_child(col)
-	var cam := Camera3D.new()
-	cam.position = Vector3(0, 0.7, 0)
-	_player.add_child(cam)
+	_cam = Camera3D.new()
+	_cam.position = Vector3(0, 0.7, 0)
+	_player.add_child(_cam)
 	add_child(_player)
 	_player.global_position = Vector3(0, 1, 7)
 

@@ -1,29 +1,68 @@
 # PHANTOM LOOP 👻
 
-Un prototype d'escape room à boucles temporelles pour **PHANTOM**, le hackathon
-Hack Club (février 2027). À chaque boucle, tes actions sont rejouées par un
-fantôme. Résous les salles en coopérant avec tes propres copies.
+**Demo:** <https://peakbuild112000.github.io/phantom-loop/>  
+**Repository:** <https://github.com/peakbuild112000/phantom-loop>  
+**Engine:** Godot 4.6.1 stable
 
-* **Moteur :** Godot 4.6.1 stable
-* **Cibles :** Desktop + WebGL2
-* **Repo :** <https://github.com/peakbuild112000/phantom-loop>
-* **Design :** [docs/PHANTOM_LOOP.md](docs/PHANTOM_LOOP.md)
+A time-loop escape room built for **PHANTOM**, the Hack Club hackathon. Every
+attempt is replayed by a ghost. Solve the rooms by cooperating with your own
+past selves.
 
-> ⚠️ Ce dossier est volontairement **un squelette** : le code du jeu est fourni
-> dans [docs/COPY_ME.md](docs/COPY_ME.md) et doit être copié à la main dans les
-> dossiers indiqués. Rien n'est généré automatiquement dans `scripts/`,
-> `scenes/` ou `shaders/`.
+## Contents
 
-## Démarrage
+- [Demo](#demo)
+- [How to play](#how-to-play)
+- [Controls](#controls)
+- [Run from source](#run-from-source)
+- [Web export](#web-export)
+- [CI / deployment](#ci--deployment)
+- [Project layout](#project-layout)
+- [Hackatime](#hackatime)
+- [License](#license)
 
-1. Copie les trois blocs de [docs/COPY_ME.md](docs/COPY_ME.md) :
-   - `scripts/phantom_loop.gd`
-   - `shaders/ghost.gdshader`
-   - `scenes/main.tscn`
-2. Ouvre ce dossier avec Godot 4.6.1.
-3. Appuie sur **F6** (ou le bouton Play).
+## Demo
 
-Commande équivalente :
+Play it in the browser:
+
+<https://peakbuild112000.github.io/phantom-loop/>
+
+Recommended browser: a recent Chrome, Edge, Firefox or Safari with WebGL2
+enabled. Click the canvas once if mouse look does not respond.
+
+Source code:
+
+<https://github.com/peakbuild112000/phantom-loop>
+
+## How to play
+
+You have 30 seconds per loop. Stand on the three glowing plates at the same
+time to open the door.
+
+* You activate a plate just by standing on it.
+* A ghost only activates a plate if you held `E` while standing on it during
+  that recording. Hold `E` on a plate, let the loop end, and your ghost will
+  keep holding it.
+* Once all plates are lit, the door stays open for the rest of the loop, so you
+  can walk through it.
+* The first puzzle needs two ghosts plus yourself. Later rooms add timed doors,
+  carried keys and beam blockers.
+
+The full design and the 50-hour roadmap are in [docs/PHANTOM_LOOP.md](docs/PHANTOM_LOOP.md).
+
+## Controls
+
+| Input | Action |
+| --- | --- |
+| `W A S D` | Move |
+| Mouse | Look (horizontal and vertical) |
+| `E` (hold) | Perform the action ghosts record |
+| `Esc` | Release the mouse |
+| Click | Capture the mouse again |
+| `R` | Restart after escaping |
+
+## Run from source
+
+Install Godot 4.6.1 or newer, then open this folder.
 
 ```powershell
 $godot = "C:\Users\PC\Desktop\Godot\Godot_v4.6.1-stable_win64_console.exe"
@@ -33,54 +72,54 @@ $project = "C:\Users\PC\Documents\project-1\phantom-loop"
 & $godot --path $project
 ```
 
-## Commandes
+Press **F6** or the Play button.
 
-| Touche | Action |
-|--------|--------|
-| `W A S D` | Marcher |
-| Souris | Regarder |
-| `E` | Maintenir l'action (les fantômes ne retiennent que ce geste) |
-| `Esc` | Relâcher la souris |
-| `R` | Rejouer après avoir gagné |
+> The game source is already present in `scripts/`, `scenes/` and `shaders/`.
+> [docs/COPY_ME.md](docs/COPY_ME.md) keeps an identical copy of every file if
+> you want to retype them yourself for Hackatime.
 
-## Export Web
+## Web export
 
-Depuis Godot : **Project → Export → Web** (le preset est déjà configuré),
-ou en ligne de commande :
+The `Web` preset is already configured in `export_presets.cfg`.
 
 ```powershell
+New-Item -ItemType Directory -Force -Path "$project\build\web" | Out-Null
 & $godot --headless --path $project --export-release "Web" "$project\build\web\index.html"
 ```
 
-Le résultat est dans `build/web/`. Serve-le avec un serveur statique ;
-`file://` ne fonctionne pas avec WebGL.
+Serve `build/web/` with a static server. `file://` does not work with WebGL.
 
-Chaque push sur `main` déclenche aussi `.github/workflows/export-web.yml`, qui
-exporte le jeu et le publie sur GitHub Pages :
-<https://peakbuild112000.github.io/phantom-loop/>
+## CI / deployment
 
-## Hackatime
+Every push to `main` runs `.github/workflows/export-web.yml`: it downloads
+Godot 4.6.1 and the export templates, exports the Web build, and publishes it
+to GitHub Pages at the demo URL above. A workflow run without the game source
+skips the export with a warning instead of failing.
 
-Le fichier `.wakatime-project` donne le nom `phantom-loop` à tes sessions de
-code, ce qui rend le temps suivi lisible dans Hackatime. Copier le code toi-même
-dans l'éditeur est volontaire : c'est du code que tu écris vraiment.
-
-## Structure
+## Project layout
 
 ```
 phantom-loop/
-├── project.godot          # config Godot + inputs (WASD/E/R)
-├── export_presets.cfg     # preset Web
-├── icon.svg
+├── project.godot          # Godot config + WASD/E/R input map
+├── export_presets.cfg     # Web preset
 ├── docs/
-│   ├── COPY_ME.md         # code à copier
-│   └── PHANTOM_LOOP.md    # design doc + planning 50 h
-├── scripts/               # ← tu copies phantom_loop.gd ici
-├── scenes/                # ← tu copies main.tscn ici
-├── shaders/               # ← tu copies ghost.gdshader ici
-└── .github/workflows/     # export Web + GitHub Pages
+│   ├── COPY_ME.md         # exact copy of the game source
+│   └── PHANTOM_LOOP.md    # design doc + 50 h roadmap
+├── scripts/
+│   └── phantom_loop.gd    # loop recorder, ghost replay, puzzles, HUD
+├── shaders/
+│   └── ghost.gdshader     # spectral ghost material
+├── scenes/
+│   └── main.tscn          # main scene
+└── .github/workflows/     # Web export + Pages deployment
 ```
+
+## Hackatime
+
+`.wakatime-project` names this project `phantom-loop` so tracked coding time is
+easy to identify. The files in `docs/COPY_ME.md` are there if you prefer to
+retype the source yourself and count those hours.
 
 ## License
 
-MIT — voir [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).

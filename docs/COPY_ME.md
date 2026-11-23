@@ -1,10 +1,10 @@
-# Code à copier (ne pas le laisser généré par l'IA)
+# Code to copy
 
-> Ces blocs sont volontairement **dans un document**, pas dans les dossiers `scripts/`,
-> `scenes/` et `shaders/`. Copie-les toi-même dans les fichiers indiqués : c'est ton
-> travail de code, et c'est ce que Hackatime/Hackatime-compatible compte comme du temps.
+> These blocks are intentionally kept in a document, **not** in `scripts/`,
+> `scenes/` or `shaders/`. Copy them yourself into the paths shown below:
+> it is your own coding time, and this is what Hackatime counts.
 
-Ordre recommandé : 1 → 2 → 3. Ensuite ouvre le projet dans Godot 4.6.1 et appuie sur F6.
+Order: 1 → 2 → 3. Then open the project in Godot 4.6.1 and press F6.
 
 ---
 
@@ -13,9 +13,9 @@ Ordre recommandé : 1 → 2 → 3. Ensuite ouvre le projet dans Godot 4.6.1 et a
 ```gdscript
 extends Node3D
 
-## PHANTOM LOOP — prototype central (Godot 4.6)
-## À copier dans res://scripts/phantom_loop.gd
-## À attacher au nœud racine de res://scenes/main.tscn
+## PHANTOM LOOP - central prototype (Godot 4.6)
+## Copy to res://scripts/phantom_loop.gd
+## Attach to the root Node3D of res://scenes/main.tscn
 
 const LOOP_SECONDS := 30.0
 const TICK := 1.0 / 60.0
@@ -32,9 +32,12 @@ var _plates: Array[Area3D] = []
 var _door: StaticBody3D
 var _door_col: CollisionShape3D
 var _player: CharacterBody3D
+var _cam: Camera3D
 var _label: Label
 var _loops := 1
 var _won := false
+var _door_latched := false
+var _pitch := 0.0
 
 func _ready() -> void:
 	_build_room()
@@ -59,6 +62,8 @@ func _physics_process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		_player.rotate_y(-event.relative.x * 0.0025)
+		_pitch = clampf(_pitch - event.relative.y * 0.0025, -1.2, 1.2)
+		_cam.rotation.x = _pitch
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -104,8 +109,10 @@ func _step(dt: float) -> void:
 		plate.set_meta("active", active)
 		if not active:
 			all = false
-	_open_door(all)
-	if all and _player.global_position.z < -8.2:
+	if all:
+		_door_latched = true
+	_open_door(_door_latched)
+	if _door_latched and _player.global_position.z < -8.2:
 		_won = true
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -122,6 +129,9 @@ func _reset_room() -> void:
 	_time_left = LOOP_SECONDS
 	_acc = 0.0
 	_frames.clear()
+	_door_latched = false
+	_pitch = 0.0
+	_cam.rotation.x = 0.0
 	_player.global_position = Vector3(0.0, 1.0, 7.0)
 	_player.velocity = Vector3.ZERO
 	_open_door(false)
@@ -162,9 +172,9 @@ func _update_hud() -> void:
 		if p.has_meta("active") and p.get_meta("active"):
 			active += 1
 	if _won:
-		_label.text = "ESCAPED in %d loops — press R to replay" % _loops
+		_label.text = "ESCAPED in %d loops - press R to replay" % _loops
 	else:
-		_label.text = "PHANTOM LOOP  |  %04.1fs  |  loop %d  |  ghosts %d/%d  |  plates %d/%d\nWASD move · mouse look · E hold plate · Esc release" % [_time_left, _loops, _ghosts.size(), MAX_GHOSTS, active, _plates.size()]
+		_label.text = "PHANTOM LOOP  |  %04.1fs  |  loop %d  |  ghosts %d/%d  |  plates %d/%d\nWASD move - mouse look - E hold plate (ghosts copy E only) - Esc release\nOnce all plates are lit, the door stays open for this loop." % [_time_left, _loops, _ghosts.size(), MAX_GHOSTS, active, _plates.size()]
 
 func _build_room() -> void:
 	var dark := Color(0.07, 0.08, 0.13)
@@ -243,9 +253,9 @@ func _build_player() -> void:
 	capsule.height = 1.6
 	col.shape = capsule
 	_player.add_child(col)
-	var cam := Camera3D.new()
-	cam.position = Vector3(0, 0.7, 0)
-	_player.add_child(cam)
+	_cam = Camera3D.new()
+	_cam.position = Vector3(0, 0.7, 0)
+	_player.add_child(_cam)
 	add_child(_player)
 	_player.global_position = Vector3(0, 1, 7)
 
@@ -258,11 +268,14 @@ func _build_hud() -> void:
 	add_child(canvas)
 ```
 
-### Comment ça marche
-- À chaque tick fixe (60 Hz), on stocke la position du joueur et l'état de `E`.
-- Quand le timer expire, la liste est sauvegardée et rejouée par un fantôme.
-- Un fantôme n'active une plaque **que si `E` était pressé** au moment de l'enregistrement.
-- Le joueur active une plaque rien qu'en se tenant dessus. Il faut donc 2 fantômes + toi pour les 3 plaques.
+### How it works
+
+- Every 60 Hz tick, the player's position and the state of `E` are recorded.
+- When the timer ends, the recording becomes a ghost that replays it forever.
+- A ghost only lights a plate if `E` was held at that moment in the recording.
+- You light a plate just by standing on it. You need 2 ghosts + yourself for 3 plates.
+- Once all plates are lit, the door stays open for the rest of the loop, so you can
+  actually walk through it. This is why the third loop used to look "empty".
 
 ---
 
@@ -295,7 +308,7 @@ script = ExtResource("1_phantom")
 
 ---
 
-## Vérification
+## Verification
 
 ```powershell
 $godot = "C:\Users\PC\Desktop\Godot\Godot_v4.6.1-stable_win64_console.exe"
@@ -304,12 +317,10 @@ $project = "C:\Users\PC\Documents\project-1\phantom-loop"
 & $godot --path $project
 ```
 
-Si Godot râle sur un `uid`, supprime la ligne `uid="..."` eventuelle du `.tscn` : Godot la régénère.
+## Ideas to build next
 
-## Améliorations à coder toi-même (idées)
-
-- Remplacer le `SphereMesh` du fantôme par un vrai corps + traînée d'afterimages.
-- Ajouter un `AudioStreamPlayer` dont la hauteur change à chaque boucle.
-- Faire varier la disposition des plaques avec un `RandomNumberGenerator` seedé.
-- Ajouter un deuxième type d'énigme : faisceau bloqué par un corps.
-- Brancher le mode coop avec `tools/signaling_server.js` du projet Climb Together.
+- Replace the ghost sphere with a real body plus afterimage trail.
+- Add an `AudioStreamPlayer` whose pitch shifts on every loop.
+- Randomize plate positions with a seeded `RandomNumberGenerator`.
+- Add a second puzzle type: a beam blocked by a body.
+- Hook up co-op using the signaling server from the Climb Together project.

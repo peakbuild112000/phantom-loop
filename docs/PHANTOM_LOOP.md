@@ -1,79 +1,82 @@
-# PHANTOM LOOP — design doc
+# PHANTOM LOOP - design doc
+
+**Demo:** <https://peakbuild112000.github.io/phantom-loop/>  
+**Repository:** <https://github.com/peakbuild112000/phantom-loop>
 
 ## Concept
 
-Une escape room à boucles temporelles. Chaque tentative est enregistrée puis
-rejouée par un fantôme. Les énigmes demandent plusieurs actions simultanées :
-le joueur doit donc « se faire coopérer » par ses copies passées.
+A time-loop escape room. Every attempt is recorded and replayed by a ghost.
+Puzzles need several simultaneous actions, so the player has to cooperate with
+copies of themselves.
 
-* **Durée cible :** 50 h (objectif PHANTOM : 50 fragments-hours).
-* **Moteur :** Godot 4.6.1 stable, renderer GL Compatibility.
-* **Cibles :** desktop + WebGL2 (export Godot `Web`).
-* **Joueurs :** 1 (mode coop en stretch goal).
+* **Target time:** 50 hours (PHANTOM goal: 50 fragments-hours).
+* **Engine:** Godot 4.6.1 stable, GL Compatibility renderer.
+* **Platforms:** desktop + WebGL2 (Godot `Web` export).
+* **Players:** 1 (co-op is a stretch goal).
 
 ## Loop
 
-1. Entrer dans une salle, 30 s de timer.
-2. Observer les plaques / mécanismes.
-3. Résoudre une partie de l'énigme, échouer ou laisser le timer expirer.
-4. La tentative devient un fantôme qui rejoue cycle après cycle.
-5. Empiler les fantômes jusqu'à ce que toutes les conditions soient vraies en même temps.
-6. Passer à la salle suivante.
+1. Enter a room, 30-second timer starts.
+2. Observe the plates and mechanisms.
+3. Solve part of the puzzle, fail, or let the timer expire.
+4. The attempt becomes a ghost that replays on every later loop.
+5. Stack ghosts until every condition is true at the same time.
+6. Move on to the next room.
 
-## Règles de simulation
+## Simulation rules
 
-* Tick fixe à 60 Hz, avec accumulateur et maximum 5 sous-pas par frame.
-* Snapshot = `{ position: Vector3, action: bool }` par tick.
-* Replay par snapshot (pas par Input) : déterministe côté WebGL, pas de dépendance
-  au moteur physique pour la relecture.
-* Les fantômes sont des `CharacterBody3D` cinématiques : ils entrent dans les
-  `Area3D` logiques mais ne poussent pas le joueur.
-* Reset de salle : positions d'origine, timer, état des plaques, collision de porte.
+* Fixed 60 Hz tick with an accumulator and a maximum of 5 substeps per frame.
+* Snapshot = `{ position: Vector3, action: bool }` per tick.
+* Replay by snapshot instead of input: deterministic on WebGL, with no reliance
+  on physics for playback.
+* Ghosts are kinematic `CharacterBody3D` nodes: they trigger logical `Area3D`
+  nodes but do not push the player.
+* Room reset: original positions, timer, plate state, door collision.
+* Once all plates are active, the door is **latched open** until the next loop.
+  Without this, the player had to leave the last plate to reach the door, which
+  closed it again and made the third loop look empty.
+* Mouse look: yaw rotates the player, pitch rotates the camera, clamped to
+  +/-1.2 rad so the view cannot flip.
 
-## Salles du MVP
+## MVP rooms
 
-| # | Nom | Mécanique | Fantômes requis |
-|---|-----|-----------|-----------------|
-| 1 | **L'Antichambre** | 3 plaques à activer en même temps | 2 |
-| 2 | **Le Couloir** | plaque + porte qui se referme après 2 s | 2 |
-| 3 | **La Balance** | clé à porter sur une plaque pendant qu'un autre tient un levier | 3 |
-| 4 | **La Sortie** | combinaison des trois mécaniques précédentes | 3+ |
+| # | Name | Mechanic | Ghosts needed |
+|---|------|----------|---------------|
+| 1 | **Antechamber** | 3 plates active at once | 2 |
+| 2 | **Corridor** | plate + door that closes after 2 s | 2 |
+| 3 | **Balance** | carry a key onto a plate while another holds a lever | 3 |
+| 4 | **Exit** | combination of the previous three | 3+ |
 
-## Architecture (cible)
+## Architecture (target)
 
 ```
 scenes/
-  main.tscn          # racine, script phantom_loop.gd (prototype)
-  rooms/room_*.tscn  # salles (à venir)
+  main.tscn          # root, phantom_loop.gd (prototype)
+  rooms/room_*.tscn  # future rooms
 scripts/
-  phantom_loop.gd    # boucle, enregistrement, replay, reset
-  ghost.gd           # rendu spectral, traînée
-  puzzle/*.gd        # plaques, portes, leviers, faisceaux
+  phantom_loop.gd    # loop, recording, replay, reset
+  ghost.gd           # spectral rendering, afterimages
+  puzzle/*.gd        # plates, doors, levers, beams
 shaders/
   ghost.gdshader
 tests/
-  loop_test.gd       # vérifie 1 enregistrement = 1 fantôme rejoué
+  loop_test.gd       # verifies one recording = one replayed ghost
 ```
 
-## Planning 50 h
+## 50-hour plan
 
-| Bloc | Heures | Contenu |
-|------|--------|---------|
-| Prototype boucle + fantôme | 8 | snapshot, replay, reset, HUD |
-| Salles 1–4 | 12 | mécaniques, level design, signaux visuels |
-| Polish | 10 | shaders, audio, feedback, animations |
-| Coop WebRTC | 12 | signalisation, synchro des fantômes, lobby |
-| Tests + soumission | 8 | tests Godot, export Web, README, vidéo démo |
+| Block | Hours | Content |
+|-------|-------|---------|
+| Loop + ghost prototype | 8 | snapshot, replay, reset, HUD |
+| Rooms 1-4 | 12 | mechanics, level design, visual cues |
+| Polish | 10 | shaders, audio, feedback, animation |
+| Web co-op | 12 | signaling, ghost sync, lobby |
+| Tests + submission | 8 | Godot tests, Web export, README, demo video |
 
 ## Stretch goals
 
-- Générateur de salles seedé + partage de seed.
-- Classement « moins de boucles » stocké en `user://`.
-- Fantômes corrompus : un fantôme sur N rejoue une action différente.
-- Bande-son qui se déforme à chaque boucle (pitch + reverb).
-- Mode coop : chaque joueur voit les fantômes de tous les joueurs.
-
-## Pourquoi ça se démarque
-
-Le thème PHANTOM est la mécanique elle-même, pas un habillage. La démo se
-comprend en 2 secondes : on voit son propre fantôme refaire le geste à côté de soi.
+- Seeded room generator with shareable seeds.
+- "Fewest loops" leaderboard stored in `user://`.
+- Corrupted ghosts: one ghost in N replays a slightly different action.
+- Soundtrack that distorts with every loop (pitch + reverb).
+- Co-op mode: every player sees everyone else's ghosts.
