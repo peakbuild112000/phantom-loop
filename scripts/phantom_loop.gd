@@ -32,7 +32,8 @@ func _ready() -> void:
 	_build_player()
 	_build_hud()
 	_reset_room()
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# Web browsers only allow pointer lock after a user gesture.
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _physics_process(delta: float) -> void:
 	if _won:
