@@ -40,9 +40,10 @@ func _ready() -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func _physics_process(delta: float) -> void:
+	if Input.is_action_just_pressed("restart"):
+		get_tree().reload_current_scene()
+		return
 	if _won:
-		if Input.is_action_just_pressed("restart"):
-			get_tree().reload_current_scene()
 		return
 	_acc += delta
 	var steps := 0
