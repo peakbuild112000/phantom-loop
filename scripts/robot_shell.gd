@@ -94,7 +94,8 @@ static func make_viewmodel(cls: int) -> Node3D:
 			tool.position = Vector3(0.0, 0.0, -0.24)
 		2:
 			var c := CylinderMesh.new()
-			c.radius = 0.07
+			c.top_radius = 0.07
+			c.bottom_radius = 0.07
 			c.height = 0.34
 			tool.mesh = c
 			tool.rotation_degrees = Vector3(90.0, 0.0, 0.0)

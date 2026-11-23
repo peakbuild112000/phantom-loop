@@ -1,5 +1,7 @@
 extends SceneTree
 
+const RobotShell = preload("res://scripts/robot_shell.gd")
+
 func _init() -> void:
 	var scene := load("res://scenes/main.tscn") as PackedScene
 	var main := scene.instantiate()
@@ -89,4 +91,19 @@ func _init() -> void:
 	# The old bug released the pointer inside _win(); that must no longer happen.
 	var not_released: bool = not bool(main.get("_mouse_released_by_user"))
 	print("MOUSE_AFTER_LEVEL=", mode_ok, " NOT_RELEASED_ON_WIN=", not_released, " HEADLESS=", headless)
+
+	# 10. Every class builds a complete viewmodel and a walkable shell.
+	#     A bad mesh property logs an error and leaves the tool without a mesh.
+	var models_ok: bool = true
+	for i in range(4):
+		var vm: Node3D = RobotShell.make_viewmodel(i)
+		var tool := vm.get_node_or_null("HandR/Tool") as MeshInstance3D
+		if tool == null or tool.mesh == null:
+			models_ok = false
+		var shell := RobotShell.new()
+		shell.setup(i, false)
+		shell.animate(1.0, 3.0)
+		shell.free()
+		vm.free()
+	print("VIEWMODELS_OK=", models_ok)
 	quit()
